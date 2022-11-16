@@ -748,7 +748,7 @@ void mlfqs_priority(struct thread *t){
 	}
 	//priority = PRI_MAX – (nice * 2) - (recent_cpu / 4)
 	int chunk = div_mixed(t->recent_cpu,4);
-	t->priority = fp_to_int(mult_mixed() PRI_MAX - (nice * 2)); 
+	t->priority = fp_to_int(mult_mixed() PRI_MAX - (nice * 2));
 }
 
 /* Advanced Schedular */
