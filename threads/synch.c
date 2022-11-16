@@ -204,10 +204,8 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 	struct thread *curr = thread_current();
-//     int save_priority;
 	if (lock->holder != NULL){
 		curr->wait_on_lock = lock;
-//		save_priority = curr->priority;//컨택스트 스위칭이 되기전에 원래의 우선순의 값으로 설정
         if (list_empty(&(lock->holder->donations)))
             list_push_front(&(lock->holder->donations), &(curr->donation_elem));
         else
@@ -362,5 +360,3 @@ bool cmp_sem_priority(struct list_elem *e1, struct list_elem *e2){
 	struct thread *t2 = list_entry(list_front(&sema_wait2), struct thread, elem);
 	return t1->priority > t2->priority;
 }
-
-
