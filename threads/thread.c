@@ -455,7 +455,7 @@ thread_get_load_avg (void) {
 	/* TODO: Your implementation goes here */
 	enum intr_level old_level;
 	old_level = intr_disable();
-	int load_avg_100 = fp_to_int(mult_mixed(load_avg,100));
+	int load_avg_100 = fp_to_int_round(mult_mixed(load_avg,100));
 	intr_set_level(old_level);
 	return load_avg_100;
 }
@@ -664,6 +664,7 @@ do_schedule(int status) {
 	ASSERT (thread_current()->status == THREAD_RUNNING);
 	while (!list_empty (&destruction_req)) {
 		struct thread *victim = list_entry (list_pop_front (&destruction_req), struct thread, elem);
+		list_remove(&victim->all_elem);
 		palloc_free_page(victim);
 	}
 	thread_current ()->status = status;
@@ -782,9 +783,8 @@ void mlfqs_recent_cpu(struct thread *t){
 	if(t == idle_thread){
 		return;
 	}
-	int converted_load_avg = mult_mixed(load_avg,2);
 	//recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * recent_cpu + nice
-	t->recent_cpu = add_mixed(mult_fp(converted_load_avg / add_mixed(converted_load_avg,1),t->recent_cpu),t->nice);
+	t->recent_cpu = add_mixed(mult_fp(div_fp(mult_mixed(load_avg,2),add_mixed(mult_mixed(load_avg,2),1)),t->recent_cpu),t->nice);
 }
 
 /* Advanced Schedular */
@@ -792,12 +792,12 @@ void mlfqs_load_avg(void){
 	//load_avg = (59/60) * load_avg + (1/60) * ready_threads
 	struct thread* current = thread_current();
 	size_t ready_queue_size = list_size(&ready_list);
-	if (current == idle_thread){
+	if (current != idle_thread){
 		//현재 CPU에 idle이 실행중
-		load_avg = fp_to_int(add_fp(mult_fp(load_avg,(59 / 60)),mult_mixed((1 / 60),ready_queue_size)));
-	}else{
-		load_avg = fp_to_int(add_fp(mult_fp(load_avg,(59 / 60)),mult_mixed((1 / 60),(ready_queue_size+1))));
+		ready_queue_size++;
 	}
+	int cpu_coeff = div_mixed(int_to_fp(ready_queue_size), 60);
+	load_avg = add_fp(mult_fp(load_avg,div_mixed(int_to_fp(59), 60)),cpu_coeff);
 	ASSERT(load_avg >= 0);
 }
 
@@ -807,11 +807,11 @@ void mlfqs_increment(void){
 	if(current == idle_thread){
 		return;
 	}
-	current->recent_cpu = current->recent_cpu + 1;
+	current->recent_cpu = add_mixed(current->recent_cpu,1);
 }
 
 void mlfqs_recalc(void){
-	struct list_elem* elem = list_front(&all_list);
+	struct list_elem* elem = list_begin(&all_list);
 	while (elem != list_tail(&all_list))
 	{
 		struct thread* target = list_entry(elem,struct thread,all_elem);
