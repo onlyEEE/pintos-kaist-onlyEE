@@ -96,7 +96,7 @@ int64_t get_next_tick_to_awake(void);
 #define running_thread() ((struct thread *) (pg_round_down (rrsp ())))
 
 
-// Global descriptor table for the thread_start.
+// Global descriptor table for the thread_start.  
 // Because the gdt will be setup after the thread_init, we should
 // setup temporal gdt first.
 static uint64_t gdt[3] = { 0, 0x00af9a000000ffff, 0x00cf92000000ffff };
@@ -402,10 +402,11 @@ thread_set_priority (int new_priority) {
 void test_max_priority(int new_priority){
 	if (list_empty(&ready_list))
 		return ; //  좀 더 좋은방법 있으면 알려주셈.
-	if ((list_entry(list_front(&ready_list), struct thread, elem)->priority  < new_priority))
+	if ((list_entry(list_front(&ready_list), struct thread, elem)->priority < new_priority))
 		return;
 	thread_yield();
 }
+
 
 /* Returns the current thread's priority. */
 int
