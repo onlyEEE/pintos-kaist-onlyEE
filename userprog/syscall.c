@@ -41,7 +41,36 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
-	
+	switch(f->rsp){
+		case SYS_HALT :
+		halt();
+		case SYS_EXIT :
+		exit();
+		case SYS_FORK :
+		fork();                 /* Clone current process. */
+		case SYS_EXEC :
+		exec();                  /* Terminate this process. */
+		case SYS_WAIT :
+		wait();                   /* Wait for a child process to die. */
+		case SYS_CREATE :
+		create();                 /* Create a file. */
+		case SYS_REMOVE :                /* Delete a file. */
+		remove();
+		case SYS_OPEN :
+		open();
+		case SYS_FILESIZE :               /* Obtain a file's size. */
+		filesize();
+		case SYS_READ :                   /* Read from a file. */
+		read();
+		case SYS_WRITE :                  /* Write to a file. */
+		write();
+		case SYS_SEEK :                   /* Change position in a file. */
+		seek();
+		case SYS_TELL :                   /* Report current position in a file. */
+		tell();
+		case SYS_CLOSE :
+		close();
+	}
 	printf ("system call!\n");
 	thread_exit ();
 }

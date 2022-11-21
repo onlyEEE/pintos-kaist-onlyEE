@@ -232,7 +232,7 @@ process_exit (void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	// lock_release(&locks);
-	printf("%s: exit(%d)\n", curr->name, curr->tid);
+	printf("%s: exit(%d)\n", curr->name, curr->status);
 	process_cleanup ();
 }
 
