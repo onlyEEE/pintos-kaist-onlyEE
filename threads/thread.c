@@ -96,7 +96,7 @@ int64_t get_next_tick_to_awake(void);
 #define running_thread() ((struct thread *) (pg_round_down (rrsp ())))
 
 
-// Global descriptor table for the thread_start.  
+// Global descriptor table for the thread_start.
 // Because the gdt will be setup after the thread_init, we should
 // setup temporal gdt first.
 static uint64_t gdt[3] = { 0, 0x00af9a000000ffff, 0x00cf92000000ffff };
@@ -229,8 +229,22 @@ thread_create (const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
+	/* System Call */
+	t->exit_status = 0;
+
+	list_push_back(&thread_current()->child_list, &t->child_elem);
+
+	t->fd_table = palloc_get_multiple(PAL_ZERO,FDT_PAGES);
+	if(t->fd_table == NULL){
+		return TID_ERROR;
+	}
+	t->fd_idx = -1;
+	t->fd_table[0] = STDIN_FILENO;
+	t->fd_table[1] = STDOUT_FILENO;
+
 	/* Add to run queue. */
 	thread_unblock (t);
+	test_max_priority(thread_current()->priority);
 	return tid;
 }
 
@@ -402,11 +416,15 @@ thread_set_priority (int new_priority) {
 void test_max_priority(int new_priority){
 	if (list_empty(&ready_list))
 		return ; //  좀 더 좋은방법 있으면 알려주셈.
-	if ((list_entry(list_front(&ready_list), struct thread, elem)->priority < new_priority))
-		return;
-	thread_yield();
+	int run_priority = thread_current()->priority;
+	struct list_elem *e= list_begin(&ready_list);
+	struct thread *t = list_entry(e, struct thread, elem);
+    
+	if (run_priority < t->priority)
+	{
+		thread_yield();
+	}
 }
-
 
 /* Returns the current thread's priority. */
 int
@@ -467,7 +485,7 @@ thread_get_recent_cpu (void) {
 	enum intr_level old_level;
 	old_level = intr_disable();
 	struct thread *curr = thread_current();
-	int recent_cpu = fp_to_int_round(mult_mixed((curr->recent_cpu),100));
+	int recent_cpu = fp_to_int(mult_mixed((curr->recent_cpu),100));
 	intr_set_level(old_level);
 	return recent_cpu;
 }
@@ -537,6 +555,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 	list_init(&(t->donations));
 	t->wait_on_lock = NULL;
 	t->magic = THREAD_MAGIC;
+
+	list_init(&t->child_list);
+	sema_init(&t->fork_sema,0);
+	sema_init(&t->wait_sema,0);
+	sema_init(&t->free_sema,0);
 
 	/* Advanced Scheduler */
 	t->nice = NICE_DEFAULT;
@@ -819,4 +842,19 @@ void mlfqs_recalc(void){
 		mlfqs_recent_cpu(target);
 		elem = list_next(elem);
 	}
+}
+
+/* Project2-3 System Call */
+struct thread* get_child(tid_t pid){
+	struct thread* curr = thread_current();
+	struct list* childs = &curr->child_list;
+	struct list_elem* elem = list_begin(childs);
+	while(elem != list_end(childs)){
+		struct thread* target = list_entry(elem,struct thread,child_elem);
+		if(target->tid == pid){
+			return target;
+		}
+		elem = list_next(elem);
+	}
+	return NULL;
 }
