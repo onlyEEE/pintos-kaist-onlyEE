@@ -31,6 +31,10 @@ struct file* find_file(int fd);
 int fork (const char *thread_name,struct intr_frame* if_);
 int wait (int pid);
 void close (int fd);
+void seek (int fd, unsigned position);
+unsigned tell (int fd);
+int add_file(struct file *file);
+
 
 /* System call.
  *
@@ -104,7 +108,14 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_CLOSE:
 		close(f->R.rdi);
 		break;
+	case SYS_SEEK:
+		seek(f->R.rdi,f->R.rsi);
+		break;
+	case SYS_TELL:
+		f->R.rax = tell(f->R.rdi);
+		break;
 	default:
+		thread_exit();
 		break;
 	}
 	//printf ("system call!\n");
@@ -167,25 +178,45 @@ int exec (const char *cmd_line){
 /* Project2-3 System Call */
 int open (const char *file){
 	check_address(file);
-	struct thread* curr = thread_current();
-	struct file** fdt = curr->fd_table;
-	struct file* ret_file = filesys_open(file);
-	if (ret_file == NULL){
+	lock_acquire(&lock);
+	struct file *fileobj = filesys_open(file);
+
+	if (fileobj == NULL) {
 		return -1;
 	}
-	/* Validation 완료 후, FD Table을 순회해서 체크 */
-	int i = 2;
-	while(fdt[i] != 0){
-		i++;
+
+	int fd = add_file(fileobj); // fdt : file data table
+
+	// fd table이 가득 찼다면
+	if (fd == -1) {
+		file_close(fileobj);
 	}
-	fdt[i] = ret_file;
-	curr->fd_idx = i;
-	return i;
+	lock_release(&lock);
+	return fd;
+}
+
+int add_file(struct file *file){
+	struct thread *cur = thread_current();
+	struct file **fdt = cur->fd_table;
+
+	/* fd의 위치가 제한 범위를 넘지 않고, fd_table의 인덱스 위치와 일치한다면 */
+	// cur->fd_idx 가 어디있지? -> thread.h의 thread 구조체 안에 fd_table과 함께 선언해준다.
+	// 제한범위를 나타낼 FDCOUNT_LIMIT 등도 thread.h 파일 내에 선언(#define)해준다.
+	while (cur->fd_idx < FDCOUNT_LIMIT && fdt[cur->fd_idx]) {
+		cur->fd_idx++;
+	}
+
+	// fdt가 가득 찼다면
+	if (cur->fd_idx >= FDCOUNT_LIMIT)
+		return -1;
+
+	fdt[cur->fd_idx] = file;
+	return cur->fd_idx;
 }
 
 /* Project2-3 System Call */
 int filesize (int fd){
-	if(fd < 0 || fd >= FDT_COUNT_LIMIT){
+	if(fd < 0 || fd >= FDCOUNT_LIMIT){
 		return -1;
 	}
 	struct thread* curr = thread_current();
@@ -236,7 +267,9 @@ int write (int fd, const void *buffer, unsigned size) {
     if (fd == 1) {
         putbuf(buffer, size);
         return size;
-    }else{
+    }else if(fd == 0){
+		return -1;
+	}else{
 		struct file* ret_file = find_file(fd);
 		if (ret_file == NULL){
 			return -1;
@@ -251,7 +284,7 @@ int write (int fd, const void *buffer, unsigned size) {
 /* Project2-3 System Call */
 struct file* find_file(int fd){
 	struct thread* curr = thread_current();
-	if(fd < 0 || fd >= FDT_COUNT_LIMIT){
+	if(fd < 0 || fd >= FDCOUNT_LIMIT){
 		return NULL;
 	}
 	return curr->fd_table[fd];
@@ -268,11 +301,34 @@ int wait (int pid){
 	return process_wait(pid);
 }
 
+/* Project2-3 System Call */
 void close (int fd){
-	struct file* target = find_file(fd);
-	if (target == NULL){
+	struct file *fileobj = find_file(fd);
+	if (fileobj == NULL) {
 		return;
 	}
-	struct thread* curr = thread_current();
-	curr->fd_table[fd] = NULL;
+	remove_file(fd); 
+}
+
+void remove_file(int fd)
+{
+	struct thread *cur = thread_current();
+
+	// Error - invalid fd
+	if (fd < 0 || fd >= FDCOUNT_LIMIT)
+		return;
+
+	cur->fd_table[fd] = NULL;
+}
+
+
+/* Project2-3 System Call */
+void seek (int fd, unsigned position){
+	struct file* file = find_file(fd);
+	file_seek(file,position);
+}
+
+unsigned tell (int fd){
+	struct file* file = find_file(fd);
+	return file_tell(file);
 }

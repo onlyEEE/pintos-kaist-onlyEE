@@ -238,7 +238,7 @@ thread_create (const char *name, int priority,
 	if(t->fd_table == NULL){
 		return TID_ERROR;
 	}
-	t->fd_idx = -1;
+	t->fd_idx = 2;
 	t->fd_table[0] = STDIN_FILENO;
 	t->fd_table[1] = STDOUT_FILENO;
 
@@ -845,7 +845,7 @@ void mlfqs_recalc(void){
 }
 
 /* Project2-3 System Call */
-struct thread* get_child(tid_t pid){
+struct thread* get_child_with_pid(tid_t pid){
 	struct thread* curr = thread_current();
 	struct list* childs = &curr->child_list;
 	struct list_elem* elem = list_begin(childs);

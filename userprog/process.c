@@ -18,8 +18,6 @@
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
-#include "threads/synch.h"
-
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -79,16 +77,19 @@ initd (void *f_name) {
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 tid_t
-process_fork (const char *name, struct intr_frame *if_ UNUSED) {
+process_fork (const char *name, struct intr_frame *if_) {
 	/* Clone current thread to new thread.*/
 	struct thread* curr = thread_current();
-	memcpy(&curr->pf,if_,sizeof(struct intr_frame));
+	memcpy(&curr->parent_if,if_,sizeof(struct intr_frame));
 	tid_t child_id = thread_create (name,PRI_DEFAULT, __do_fork, curr);//parent -> child로 context 스위칭
 	if(child_id == TID_ERROR){
 		return TID_ERROR;
 	}
-	struct thread* child = get_child(child_id);
+	struct thread* child = get_child_with_pid(child_id);
 	sema_down(&child->fork_sema);
+	if (child->exit_status == -1) {
+		return TID_ERROR;
+	}
 	return child_id;
 }
 
@@ -149,10 +150,12 @@ __do_fork (void *aux) {
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if;
 	bool succ = true;
-	parent_if = &parent->pf;
+	parent_if = &parent->parent_if;
 
 	/* 1. Read the cpu context to local stack. */
-	memcpy (&if_, parent_if, sizeof (struct intr_frame));
+	memcpy (&if_, &parent->parent_if, sizeof (struct intr_frame));
+
+
 	if_.R.rax = 0;//Fork()가 자식에게 리턴할때는 0 리턴
 
 	/* 2. Duplicate PT */
@@ -176,22 +179,29 @@ __do_fork (void *aux) {
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
 
+	/* System call 추가 */
+	// process_init ();
+	// multi-oom) Failed to duplicate
+	if (parent->fd_idx == FDCOUNT_LIMIT)
+		goto error;
 
 	int fd_index = 2;
 	struct file** parent_fdt = parent->fd_table;
 	struct file** child_fdt = current->fd_table;
-	while (fd_index < FDT_COUNT_LIMIT)
+	while (fd_index < FDCOUNT_LIMIT)
 	{
-		if(parent->fd_idx < 0){
-			break;
-		}
 		struct file* parent_file = parent_fdt[fd_index];
-		if(parent_file != 0){
-			struct file* child_file = file_duplicate(parent_file);
-			child_fdt[fd_index] = child_file;
+		if(parent_file != NULL){
+			if(parent_file > 2){
+				struct file* child_file = file_duplicate(parent_file);
+				child_fdt[fd_index] = child_file;
+			}else{
+				child_fdt[fd_index] = parent_file;
+			}
 		}
 		fd_index++;
 	}
+	current->fd_idx = parent->fd_idx;
 
 	sema_up(&current->fork_sema);
 	//process_init ();
@@ -256,7 +266,7 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	struct thread* child = get_child(child_tid);
+	struct thread* child = get_child_with_pid(child_tid);
 	struct thread* curr = thread_current();//parent process
 	if(child == NULL){
 		return -1;
@@ -277,9 +287,15 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
+	// for (int i = 0; i < FDCOUNT_LIMIT; i++)
+	// {
+	// 	curr->fd_table[i] = NULL;
+	// }
+	palloc_free_multiple(curr->fd_table,FDT_PAGES);
+	file_close(curr->running);
 	sema_up(&curr->wait_sema);
 	sema_down(&curr->free_sema);
-	process_cleanup ();
+	process_cleanup ();//추후 실험 필요	
 }
 
 /* Free the current process's resources. */
@@ -413,12 +429,15 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 
 	/* Open executable file. */
+	
 	file = filesys_open (file_name);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", file_name);
 		exit(-1);
 		//goto done;
 	}
+	t->running = file;
+	file_deny_write(file);
 
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -499,7 +518,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
+	//file_close (file);
 	return success;
 }
 
