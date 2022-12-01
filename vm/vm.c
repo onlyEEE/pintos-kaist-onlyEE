@@ -166,7 +166,9 @@ bool
 vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function */
-	
+	if (page = pml4_get_page(thread_current()->pml4, va) == NULL)
+		page = (struct page*)malloc(sizeof page);
+		page->va = va;
 	return vm_do_claim_page (page);
 }
 
@@ -174,13 +176,13 @@ vm_claim_page (void *va UNUSED) {
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
-
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-	if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, 1))
-		return false;
+	if (!pml4_get_page(thread_current()->pml4, page->va)) // table에 해당하는 값이 없으면
+		if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, 1)) // table에 해당하는 page 넣어주고,
+			return false;
 	return swap_in (page, frame->kva);
 }
 
@@ -206,7 +208,8 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 unsigned
 page_hash (const struct hash_elem *p_, void *aux UNUSED) {
   const struct page *p = hash_entry (p_, struct page, hash_elem);
-  return hash_bytes (&p->addr, sizeof p->addr);
+  return hash_bytes (&p->va, sizeof p->va);
+//   return hash_bytes (&p->addr, sizeof p->addr);
 }
 
 bool
@@ -215,5 +218,6 @@ page_less (const struct hash_elem *a_,
   const struct page *a = hash_entry (a_, struct page, hash_elem);
   const struct page *b = hash_entry (b_, struct page, hash_elem);
 
-  return a->addr < b->addr;
+//   return a->addr < b->addr;
+return a->va < b->va;
 }
