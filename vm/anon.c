@@ -22,21 +22,43 @@ void
 vm_anon_init (void) {
 	/* TODO: Set up the swap_disk. */
 	swap_disk = NULL;
+
 }
 
+// void anon_new (struct page *page, void *va, vm_initializer *init, enum vm_type type, void *aux,
+// 	bool (*initializer)(struct page *, enum vm_type, void *)){
+// 		ASSERT(page != NULL);
+
+// 		*page = (struct page) {
+// 			.operations = &anon_ops,
+// 			.va = va,
+// 			.frame = NULL,
+// 			.anon = (struct anon_page) {
+// 				.init = init,
+// 				.type = type,
+// 				.aux = aux,
+// 				.page_initializer = initializer,
+// 			}
+// 		};
+// 	}
 /* Initialize the file mapping */
 bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	page->operations = &anon_ops;
-
+	// page->frame->kva = kva;
 	struct anon_page *anon_page = &page->anon;
+	vm_initializer *init = anon_page->init;
+	// void *aux = anon_page->aux;
+
+	return true; // return value 생각해보기.
 }
 
 /* Swap in the page by read contents from the swap disk. */
 static bool
 anon_swap_in (struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
+	
 }
 
 /* Swap out the page by writing contents to the swap disk. */
