@@ -41,19 +41,18 @@ uninit_new (struct page *page, void *va, vm_initializer *init,
 		}
 	};
 }
-
+// uninit->init = lazy_load_segment.
 /* Initalize the page on first fault */
 static bool
 uninit_initialize (struct page *page, void *kva) {
 	struct uninit_page *uninit = &page->uninit;
 
 	/* Fetch first, page_initialize may overwrite the values */
-	vm_initializer *init = uninit->init;
+	vm_initializer *init = uninit->init; // lazy_load_segment.
 	void *aux = uninit->aux;
-
 	/* TODO: You may need to fix this function. */
 	return uninit->page_initializer (page, uninit->type, kva) &&
-		(init ? init (page, aux) : true);
+		(init ? init (page, aux) : true); // do lazy_load_segemnt
 }
 
 /* Free the resources hold by uninit_page. Although most of pages are transmuted

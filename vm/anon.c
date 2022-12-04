@@ -49,9 +49,11 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	// page->frame->kva = kva;
 	struct anon_page *anon_page = &page->anon;
 	vm_initializer *init = anon_page->init;
-	// void *aux = anon_page->aux;
-
-	return true; // return value 생각해보기.
+	void *aux = anon_page->aux;
+	// task init_function.
+	return true;
+	// return anon_page->page_initializer (page, anon_page->type, kva) &&
+		// (init ? init (page, aux) : true); // return value 생각해보기.
 }
 
 /* Swap in the page by read contents from the swap disk. */
