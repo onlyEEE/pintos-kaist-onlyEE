@@ -6,6 +6,7 @@
 struct page;
 enum vm_type;
 struct file_info {
+	struct file* file;
 	uint32_t read_bytes;
 	uint32_t zero_bytes;
 	off_t ofs;

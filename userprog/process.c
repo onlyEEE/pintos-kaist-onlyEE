@@ -53,10 +53,10 @@ process_create_initd (const char *file_name) {
 	strlcpy (fn_copy, file_name, PGSIZE);
 	strtok_r(file_name, " ", next_ptr);
 	printf("in process_create_initd filename=%s\n", file_name);
-	printf("in process_create_initd fn_copy=%p\n", fn_copy);
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	printf("in process_create_initd tid=%d\n", tid);
+	printf("in process_create_initd fn_copy=%p\n", fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	return tid;
@@ -272,9 +272,11 @@ process_exec (void *f_name) {
 
 	/* And then load the binary */
 	success = load (copy, &_if);
-	// hex_dump(_if.rsp,_if.rsp, USER_STACK - _if.rsp,true);
+	hex_dump(_if.rsp,_if.rsp, USER_STACK - _if.rsp,true);
 	/* If load failed, quit. */
+	printf("load %s,%p success=%d\n", file_name, file_name, success);
 	palloc_free_page (file_name);
+	printf("after palloc free_page.\n");
 	if (!success)
 		return -1;
 
@@ -544,9 +546,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	printf("=============== check load outro, args_list=%s, args_count=%d\n", argument_list[0], argument_count);
 	argument_stack(argument_list, argument_count, if_);
-	printf("=============== check load outro, args_list=%s, args_count=%d\n", argument_list[1], argument_count);
 	success = true;
 
 done:
@@ -560,7 +560,6 @@ void argument_stack(char ** parse, int count, struct intr_frame* if_){
 	char* pointer_address[128];
 	int algin_size = 0;
 	int i,j;
-
 	/* 문자열 할당 */
 	for(i = count - 1; i > -1 ; i--){
 		algin_size = strlen(parse[i]) + 1;
@@ -752,7 +751,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	printf("============check lazy_load_segment=============\n");
 	struct file_info *file_info = (struct file_info *)aux;
 	vm_claim_page(page->va);
-	if (file_read (&page->file, page->frame->kva, file_info->read_bytes) != (int) file_info->zero_bytes) {
+	if (file_read (file_info->file, page->frame->kva, file_info->read_bytes) != (int) file_info->zero_bytes) {
 		palloc_free_page (page->frame->kva);
 		return false;
 	}
@@ -779,6 +778,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT (pg_ofs (upage) == 0);
 	ASSERT (ofs % PGSIZE == 0);
+	printf("=============check load_segement============\n");
 	while (read_bytes > 0 || zero_bytes > 0) {
 		/* Do calculate how to fill this page.
 		 * We will read PAGE_READ_BYTES bytes from FILE
@@ -788,6 +788,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
 		struct file_info *aux_file = (struct file_info *)malloc(sizeof(struct file_info));
+		aux_file->file = file;
 		aux_file->ofs = ofs;
 		aux_file->read_bytes = read_bytes;
 		aux_file->zero_bytes = zero_bytes;
@@ -815,7 +816,8 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
-	success = vm_alloc_page_with_initializer(VM_ANON | VM_MARKER_0, stack_bottom, 1, NULL, NULL); 
+	printf("stack bottom = %p\n", stack_bottom);
+	success = vm_alloc_page_with_initializer(VM_ANON, stack_bottom, 1, NULL, NULL); 
 	if(success)
 	{
 		success = vm_claim_page(stack_bottom);
