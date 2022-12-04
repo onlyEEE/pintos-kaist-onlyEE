@@ -297,6 +297,7 @@ process_wait (tid_t child_tid UNUSED) {
 	 * XXX:       implementing the process_wait. */
 	struct thread* child = get_child_with_pid(child_tid);
 	if(child == NULL){
+		printf("child is NULL\n");
 		return -1;
 	}
 	
@@ -746,10 +747,12 @@ lazy_load_segment (struct page *page, void *aux) {
 	struct file_info *file_info = (struct file_info *)aux;
 	int temp;
 	// vm_claim_page(page->va);
+	// printf("========= lazy_load_segment =========\n");
 	file_seek(file_info->file, file_info->ofs);
+	// printf("file_info->ofs%p\n", file_info->ofs);
 	if (temp = file_read(file_info->file, page->frame->kva, file_info->read_bytes) != file_info->read_bytes)
 	{
-		// printf("check file read failed!\n");
+		printf("check file read failed!\n");
 		palloc_free_page(page->frame->kva);
 		return false;
 	}
@@ -780,6 +783,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT (pg_ofs (upage) == 0);
 	ASSERT (ofs % PGSIZE == 0);
+	// printf("==========load_segment==========\n");
 	while (read_bytes > 0 || zero_bytes > 0) {
 		/* Do calculate how to fill this page.
 		 * We will read PAGE_READ_BYTES bytes from FILE

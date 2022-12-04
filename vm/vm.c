@@ -215,6 +215,7 @@ vm_do_claim_page (struct page *page) {
 	frame->page = page;
 	page->frame = frame;
 	// printf("page->va %p\n", page->va);
+	// printf("==========vm_do_claim_page============\n");
 	// printf("page->frame->kva %p\n", page->frame->kva);
 	// printf("frame->page->va %p\n", frame->page->va);
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
@@ -237,6 +238,17 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
+	struct hash_iterator i;
+	bool success = true;
+	hash_first (&i, &src->spt_hash);
+	while (hash_next(&i)){
+		struct page *src_page = hash_entry (hash_cur(&i), struct page, hash_elem);
+		struct page *dst_page = (struct page *)malloc(sizeof(struct page));
+		// printf("sizeof src_page %d\n", sizeof(*src_page));
+		memcpy(dst_page, src_page, sizeof(*src_page));
+		success &= spt_insert_page(dst, dst_page);
+	}
+	return success;
 }
 
 /* Free the resource hold by the supplemental page table */
@@ -244,6 +256,15 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	struct hash_iterator i;
+	hash_first (&i, &spt->spt_hash);
+	printf("get_child_with_pid = %p\n", get_child_with_pid(thread_tid()));
+	printf("current thread tid = %d\n", thread_tid());
+	printf("current thread get name = %s\n", thread_name());
+	while (hash_next(&i)){
+		struct page *target = hash_entry (hash_cur(&i), struct page, hash_elem);
+		spt_remove_page(spt, target);
+	}
 }
 
 unsigned
