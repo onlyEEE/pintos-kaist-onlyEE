@@ -207,7 +207,6 @@ parse_options (char **argv) {
 		char *save_ptr;
 		char *name = strtok_r (*argv, "=", &save_ptr);
 		char *value = strtok_r (NULL, "", &save_ptr);
-		printf("=====parse_options=====\n name = %s\n", name);
 		if (!strcmp (name, "-h"))
 			usage ();
 		else if (!strcmp (name, "-q"))
