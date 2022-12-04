@@ -48,19 +48,15 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 
 	/* Check wheter the upage is already occupied or not. */
-	printf("check vm_alloc vm_type : %d\n", type);
-
 	if (spt_find_page (spt, upage) == NULL) {
 		/* TODO: Create the page, fetch the initializer according to the VM type,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
 		struct page *new_pg = (struct page *)malloc(sizeof(struct page));
 		if (new_pg == NULL) goto err;
-		printf("check before switch %d\n", type);
-		switch (VM_TYPE(type))
+		switch (type)
 		{
 			case VM_ANON:
-				printf("check vm_anon");
 				uninit_new (new_pg, upage, init, type, aux, anon_initializer);
 				/* code */
 				break;
@@ -178,14 +174,22 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Your code goes here */
 	printf("=============check vm_try_handle_fault ==============\n");
 	printf("rsp=%p\nfault_addr=%p\n user=%d\n write=%d\n not_present=%d\n", f->rsp, addr, user, write, not_present);
-	if (page = spt_find_page(spt, addr) == NULL || true)
+	page = spt_find_page(spt, addr);
+	if (page == NULL || page->frame == NULL)
 	{
 		
 		printf("=============check vm_try_handle_fault_page_fault ture ==============\n");
-		return vm_do_claim_page (page);
+		if (page==NULL)
+			return vm_alloc_page(VM_ANON, addr, write);
+		if (page->frame == NULL)
+			return vm_do_claim_page (page);
 	}
 	else
+	{
+		printf("else page=%p\n",page);
+		printf("so... what page->va=%p, page->frame=%p\n", page->va, page->frame);
 		return false;
+	}
 }
 
 /* Free the page.
@@ -202,8 +206,14 @@ vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function */
 	page = spt_find_page (&thread_current()->spt, va);
-	printf("in vm_claim_page page = %p\n", page);
-	return vm_do_claim_page (page);
+	// if (page){
+		printf("in vm_claim_page page = %p\n", page);
+		return vm_do_claim_page (page);
+	
+	// else{
+	// 	vm_alloc_page(VM_ANON, va, 1);
+	// 	return false;
+	// }
 }
 
 /* Claim the PAGE and set up the mmu. */
@@ -214,14 +224,17 @@ vm_do_claim_page (struct page *page) {
 	printf("===========do_cl===============\n");
 	frame->page = page;
 	page->frame = frame;
+	printf("page->va %p\n", page->va);
 	printf("page->frame->kva %p\n", page->frame->kva);
-	printf("page->operations%p\n",page->operations);
+	printf("frame->page->va %p\n", frame->page->va);
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-	if (pml4_get_page(thread_current()->pml4, page->va) == NULL) // table에 해당하는 값이 없으면
+	if (pml4_get_page(thread_current()->pml4, page->va) == NULL) {// table에 해당하는 값이 없으면
 		if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, 1)) // table에 해당하는 page 넣어주고,
 			{
+				printf("check vm_do_claim_page false\n");
 				return false;
 			}
+	}
 	return swap_in (page, frame->kva);
 }
 
