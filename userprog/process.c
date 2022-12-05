@@ -86,7 +86,6 @@ tid_t process_fork(const char *name, struct intr_frame *if_) {
 	if (tid == TID_ERROR) {
 		return TID_ERROR;
 	}
-
 	struct thread *child = get_child_with_pid(tid);
 	sema_down(&child->fork_sema);
 	if (child->exit_status == -1) {
@@ -233,9 +232,7 @@ __do_fork (void *aux) {
 
 	}
 	current->fd_idx = parent->fd_idx;
-
 	sema_up(&current->fork_sema);
-
 	/* Finally, switch to the newly created process. */
 	if (succ){
 		do_iret (&if_);
@@ -297,10 +294,8 @@ process_wait (tid_t child_tid UNUSED) {
 	 * XXX:       implementing the process_wait. */
 	struct thread* child = get_child_with_pid(child_tid);
 	if(child == NULL){
-		printf("child is NULL\n");
 		return -1;
 	}
-	
 	sema_down(&child->wait_sema);
 	int ret = child->exit_status;
 	list_remove(&child->child_elem);
@@ -663,7 +658,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT (pg_ofs (upage) == 0);
 	ASSERT (ofs % PGSIZE == 0);
-
 	file_seek (file, ofs);
 	while (read_bytes > 0 || zero_bytes > 0) {
 		/* Do calculate how to fill this page.
@@ -683,7 +677,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 			return false;
 		}
 		memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
 		/* Add the page to the process's address space. */
 		if (!install_page (upage, kpage, writable)) {
 			printf("fail\n");
@@ -704,7 +697,6 @@ static bool
 setup_stack (struct intr_frame *if_) {
 	uint8_t *kpage;
 	bool success = false;
-
 	kpage = palloc_get_page (PAL_USER | PAL_ZERO);
 	if (kpage != NULL) {
 		success = install_page (((uint8_t *) USER_STACK) - PGSIZE, kpage, true);
@@ -747,7 +739,6 @@ lazy_load_segment (struct page *page, void *aux) {
 	struct file_info *file_info = (struct file_info *)aux;
 	int temp;
 	// vm_claim_page(page->va);
-	// printf("========= lazy_load_segment =========\n");
 	file_seek(file_info->file, file_info->ofs);
 	// printf("file_info->ofs%p\n", file_info->ofs);
 	if (temp = file_read(file_info->file, page->frame->kva, file_info->read_bytes) != file_info->read_bytes)
@@ -805,7 +796,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
-		// ofs += page_read_bytes;
 		ofs += PGSIZE;
 		upage += PGSIZE;
 	}
@@ -821,7 +811,7 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
-	success = vm_alloc_page_with_initializer(VM_ANON, stack_bottom, 1, NULL, NULL); 
+	success = vm_alloc_page_with_initializer(VM_ANON, stack_bottom, 1, NULL, NULL);  // setup_stack using marker VM_MARKER_0.
 	if(success)
 	{
 		success = vm_claim_page(stack_bottom);
