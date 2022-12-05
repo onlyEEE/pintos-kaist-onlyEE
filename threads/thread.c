@@ -233,7 +233,6 @@ thread_create (const char *name, int priority,
 	t->exit_status = 0;
 
 	list_push_back(&thread_current()->child_list, &t->child_elem);
-
 	t->fd_table = palloc_get_multiple(PAL_ZERO,FDT_PAGES);
 	if(t->fd_table == NULL){
 		return TID_ERROR;

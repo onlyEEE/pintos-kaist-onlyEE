@@ -46,7 +46,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 	ASSERT (VM_TYPE(type) != VM_UNINIT)
 	struct supplemental_page_table *spt = &thread_current ()->spt;
-
+	void *initializer = NULL;
 	/* Check wheter the upage is already occupied or not. */
 	if (spt_find_page (spt, upage) == NULL) {
 		/* TODO: Create the page, fetch the initializer according to the VM type,
@@ -57,11 +57,11 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		switch (type)
 		{
 			case VM_ANON:
-				uninit_new (new_pg, upage, init, type, aux, anon_initializer);
 				/* code */
+				initializer = anon_initializer;
 				break;
 			case VM_FILE:
-				uninit_new (new_pg, upage, init, type, aux, file_backed_initializer);
+				initializer = file_backed_initializer;
 				break;
 			case VM_PAGE_CACHE:
 				break;
@@ -69,6 +69,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 				break;
 		}
 		/* TODO: Insert the page into the spt. */
+		uninit_new (new_pg, upage, init, type, aux, initializer);
 		spt_insert_page(spt, new_pg);
 	}
 	return true;
@@ -109,7 +110,8 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
-	vm_dealloc_page (page);
+	hash_delete(&spt->spt_hash, &page->hash_elem);
+	// if (page) vm_dealloc_page (page);
 	return true;
 }
 
@@ -173,13 +175,21 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 	page = spt_find_page(spt, addr);
-	if (page->frame == NULL)
+	// printf("[Debug]try_handle_fault\n");
+	// printf("[Debug]if_rsp : %p\n", f->rsp);
+	// printf("[Debug]fault_addr : %p\n", addr);
+	// printf("[Debug]thread_tid : %d\n", thread_tid());
+	// printf("[Debug]spt_find_page : %p\n", page);
+	// printf("[Debug]page->frame : %p\n", page->frame);
+	if (page != NULL && page->frame == NULL)
 	{
 		
 		return vm_do_claim_page (page);
 	}
+	else if (addr == NULL) return false;
 	else
 	{
+		// printf("check fault false\n");
 		return false;
 	}
 }
@@ -214,8 +224,9 @@ vm_do_claim_page (struct page *page) {
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
-	// printf("page->va %p\n", page->va);
 	// printf("==========vm_do_claim_page============\n");
+	// printf("page %p\n", page);
+	// printf("page->va %p\n", page->va);
 	// printf("page->frame->kva %p\n", page->frame->kva);
 	// printf("frame->page->va %p\n", frame->page->va);
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
@@ -244,8 +255,13 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 	while (hash_next(&i)){
 		struct page *src_page = hash_entry (hash_cur(&i), struct page, hash_elem);
 		struct page *dst_page = (struct page *)malloc(sizeof(struct page));
+		memcpy(dst_page, src_page, sizeof(struct page));
+		dst_page->frame = NULL;
+		if (vm_do_claim_page(dst_page))
+		{
+			memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
+		}
 		// printf("sizeof src_page %d\n", sizeof(*src_page));
-		memcpy(dst_page, src_page, sizeof(*src_page));
 		success &= spt_insert_page(dst, dst_page);
 	}
 	return success;
@@ -258,13 +274,11 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	 * TODO: writeback all the modified contents to the storage. */
 	struct hash_iterator i;
 	hash_first (&i, &spt->spt_hash);
-	printf("get_child_with_pid = %p\n", get_child_with_pid(thread_tid()));
-	printf("current thread tid = %d\n", thread_tid());
-	printf("current thread get name = %s\n", thread_name());
 	while (hash_next(&i)){
 		struct page *target = hash_entry (hash_cur(&i), struct page, hash_elem);
-		spt_remove_page(spt, target);
+		if (target) spt_remove_page(spt, target);
 	}
+	if(!hash_empty(&spt->spt_hash)) hash_destroy(&spt->spt_hash, page_hash);
 }
 
 unsigned
