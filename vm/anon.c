@@ -74,7 +74,6 @@ static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
 	struct frame *frame = page->frame;
-	// page->frame = NULL;
 	if (page){
 		if(anon_page) {
 			if (anon_page->aux){

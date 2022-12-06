@@ -202,8 +202,8 @@ hash_first (struct hash_iterator *i, struct hash *h) {
 struct hash_elem *
 hash_next (struct hash_iterator *i) {
 	ASSERT (i != NULL);
-
 	i->elem = list_elem_to_hash_elem (list_next (&i->elem->list_elem));
+	uint32_t cheker = list_elem_to_hash_elem (list_end (i->bucket));
 	while (i->elem == list_elem_to_hash_elem (list_end (i->bucket))) {
 		if (++i->bucket >= i->hash->buckets + i->hash->bucket_cnt) {
 			i->elem = NULL;
@@ -211,7 +211,6 @@ hash_next (struct hash_iterator *i) {
 		}
 		i->elem = list_elem_to_hash_elem (list_begin (i->bucket));
 	}
-
 	return i->elem;
 }
 

@@ -149,7 +149,6 @@ page_fault (struct intr_frame *f) {
 #endif
 	/* Count page faults. */
 	page_fault_cnt++;
-	printf("chekc vm_try_handle_fault\n");
 	
 	exit(-1);
 
