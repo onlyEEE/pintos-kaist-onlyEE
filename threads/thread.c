@@ -558,17 +558,19 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->init_priority = priority;
 	list_init(&(t->donations));
 	t->wait_on_lock = NULL;
-	t->magic = THREAD_MAGIC;
+	t->stack_bottom = USER_STACK;
 
 	list_init(&t->child_list);
 	sema_init(&t->fork_sema,0);
 	sema_init(&t->wait_sema,0);
 	sema_init(&t->free_sema,0);
-
+	// #ifdef	VM
+	// #endif
 	/* Advanced Scheduler */
 	t->nice = NICE_DEFAULT;
 	t->recent_cpu = RECENT_CPU_DEFAULT;
 	list_push_front(&all_list,&t->all_elem);
+	t->magic = THREAD_MAGIC;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

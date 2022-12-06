@@ -77,11 +77,14 @@ anon_destroy (struct page *page) {
 	if (page){
 		if(anon_page) {
 			if (anon_page->aux){
-				free(anon_page->aux);
+				// free(anon_page->aux);
+				anon_page->aux = NULL;
 			}
 		}
-		// if(frame)
-		// 	free(frame);
+		if(frame){
+			page->frame = NULL;
+			free(frame);
+		}
 	}
 	return ;
 }

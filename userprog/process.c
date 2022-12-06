@@ -741,7 +741,6 @@ lazy_load_segment (struct page *page, void *aux) {
 	// printf("file_info->ofs%p\n", file_info->ofs);
 	if (temp = file_read(file_info->file, page->frame->kva, file_info->read_bytes) != file_info->read_bytes)
 	{
-		printf("check file read failed!\n");
 		palloc_free_page(page->frame->kva);
 		return false;
 	}
@@ -813,7 +812,10 @@ setup_stack (struct intr_frame *if_) {
 	if(success)
 	{
 		success = vm_claim_page(stack_bottom);
-		if (success) if_->rsp = USER_STACK;
+		if (success) {
+			if_->rsp = USER_STACK;
+			thread_current()->stack_bottom = stack_bottom;
+		}
 	}
 	return success;
 }
