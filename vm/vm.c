@@ -181,12 +181,12 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	// printf("[Debug]thread_tid : %d\n", thread_tid());
 	// printf("[Debug]spt_find_page : %p\n", page);
 	// printf("[Debug]page->frame : %p\n", page->frame);
-	if (page != NULL && page->frame == NULL)
+	if (addr == NULL) return false;
+	else if (page != NULL && page->frame == NULL)
 	{
 		
 		return vm_do_claim_page (page);
 	}
-	else if (addr == NULL) return false;
 	else
 	{
 		// printf("check fault false\n");
@@ -256,14 +256,26 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct page *src_page = hash_entry (hash_cur(&i), struct page, hash_elem);
 		struct page *dst_page = (struct page *)malloc(sizeof(struct page));
 		memcpy(dst_page, src_page, sizeof(struct page));
-		dst_page->frame = NULL;
-		if (vm_do_claim_page(dst_page))
-		{
-			memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
+		// success &= vm_alloc_page_with_initializer(page_get_type(src_page), src_page->va, 1, src_page->uninit.init, src_page->uninit.aux);
+		if (src_page->frame){
+			if (vm_do_claim_page(dst_page))
+			{
+				memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
+				// hex_dump(dst_page->frame->kva, dst_page->frame->kva, PGSIZE, true);
+			}
 		}
-		// printf("sizeof src_page %d\n", sizeof(*src_page));
 		success &= spt_insert_page(dst, dst_page);
 	}
+	// struct hash_iterator j;
+	// hash_first(&j, &dst->spt_hash);
+	// while (hash_next(&j)){
+	// 	struct page *dst_page = hash_entry(hash_cur(&j), struct page, hash_elem);
+	// 	if(spt_find_page(src, dst_page->va)->frame){
+	// 		if (vm_do_claim_page(dst_page)){
+	// 			memcpy(dst_page->frame->kva, spt_find_page(src, dst_page->va)->frame->kva, PGSIZE);
+	// 		}
+	// 	}
+	// }
 	return success;
 }
 
@@ -278,7 +290,7 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 		struct page *target = hash_entry (hash_cur(&i), struct page, hash_elem);
 		if (target) spt_remove_page(spt, target);
 	}
-	if(!hash_empty(&spt->spt_hash)) hash_destroy(&spt->spt_hash, page_hash);
+	// if(!hash_empty(&spt->spt_hash)) hash_destroy(&spt->spt_hash, page_hash);
 }
 
 unsigned

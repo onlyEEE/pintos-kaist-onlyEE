@@ -13,6 +13,7 @@
 #include "threads/synch.h"
 #include "lib/string.h"
 #include "threads/palloc.h"
+#include "vm/vm.h"
 
 
 void syscall_entry (void);
@@ -158,9 +159,15 @@ int dup2(int oldfd, int newfd) {
 /* Project2-2 User Memory Access */
 void check_address(void* addr){
 	struct thread* curr = thread_current();
-	if(!is_user_vaddr(addr) || addr == NULL || pml4_get_page(curr->pml4,addr) == NULL){
+	#ifdef VM
+	if(!is_user_vaddr(addr) || addr == NULL || spt_find_page(&curr->spt.spt_hash, addr) == NULL){
 		exit(-1);
 	}
+	#else
+	if(!is_user_vaddr(addr) || addr == NULL || pml4_get_page(curr->pml4, addr) == NULL){
+		exit(-1);
+	}
+	#endif
 }
 
 /* Project2-3 System Call */
@@ -213,13 +220,11 @@ int open (const char *file){
 	check_address(file);
 	lock_acquire(&lock);
 	struct file *fileobj = filesys_open(file);
-
 	if (fileobj == NULL) {
 		return -1;
 	}
 
 	int fd = add_file(fileobj); // fdt : file data table
-
 	// fd table이 가득 찼다면
 	if (fd == -1) {
 		file_close(fileobj);
@@ -260,7 +265,6 @@ int read (int fd, void *buffer, unsigned size){
 	off_t char_count = 0;
 	struct thread *cur = thread_current();
 	struct file *file = find_file(fd);
-
 	if (fd == NULL){
 		return -1;
 	}
