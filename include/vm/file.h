@@ -2,6 +2,7 @@
 #define VM_FILE_H
 #include "filesys/file.h"
 #include "vm/vm.h"
+// #include "userprog/syscall.h"
 
 struct page;
 enum vm_type;
@@ -13,6 +14,11 @@ struct file_info {
 };
 
 struct file_page {
+	vm_initializer *init;
+	enum vm_type type;
+	void *aux;
+
+	bool (*page_initalizer) (struct page *, enum vm_type, void *kva);
 };
 
 void vm_file_init (void);

@@ -144,6 +144,8 @@ struct thread {
 	struct supplemental_page_table spt;
 	void * stack_bottom;
 	void * user_rsp;
+	void * open_addr;
+	int open_file_cnt;
 #endif
 
 	/* Owned by thread.c. */

@@ -13,8 +13,7 @@
 #include "threads/synch.h"
 #include "lib/string.h"
 #include "threads/palloc.h"
-#include "vm/vm.h"
-
+#include "vm/file.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -37,9 +36,8 @@ unsigned tell (int fd);
 int add_file(struct file *file);
 int dup2(int oldfd, int newfd);
 void remove_file(int fd);
-
-
-
+void *mmap (void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap(void * addr);
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -55,6 +53,13 @@ void remove_file(int fd);
 
 static struct lock lock;
 
+	/*register uint64_t *num asm ("rax") = (uint64_t *) num_;
+	register uint64_t *a1 asm ("rdi") = (uint64_t *) a1_;
+	register uint64_t *a2 asm ("rsi") = (uint64_t *) a2_;
+	register uint64_t *a3 asm ("rdx") = (uint64_t *) a3_;
+	register uint64_t *a4 asm ("r10") = (uint64_t *) a4_;
+	register uint64_t *a5 asm ("r8") = (uint64_t *) a5_;
+	register uint64_t *a6 asm ("r9") = (uint64_t *) a6_;*/
 
 void
 syscall_init (void) {
@@ -121,6 +126,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	case SYS_DUP2:	// project2 - extra
 		f->R.rax = dup2(f->R.rdi, f->R.rsi);
+		break;
+	case SYS_MMAP:
+		f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+		break;
+	case SYS_MUNMAP:
+		munmap(f->R.rdi);
 		break;
 	default:
 		thread_exit();
@@ -408,4 +419,27 @@ unsigned tell (int fd){
 		return;
 	}
 	return file_tell(file);
+}
+
+void *
+mmap (void *addr, size_t length, int writable, int fd, off_t offset){
+	if (addr == NULL || length == NULL) return ;
+	if (offset % PGSIZE != 0 || pg_round_down(addr) != addr) return;
+	
+	enum intr_level old_level;
+	old_level = intr_disable();
+
+	struct file *file = find_file(fd);
+	void * mapped_addr = NULL;
+	file = file_reopen(file);
+	length = file_length(file) < length ? file_length(file) : length;
+	mapped_addr = do_mmap(addr, length, writable, file, offset);
+
+	intr_set_level(old_level);
+	if (mapped_addr != NULL)
+		return addr;
+}
+
+void munmap(void * addr){
+	// do_munmap(addr);
 }

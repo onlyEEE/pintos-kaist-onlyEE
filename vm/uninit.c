@@ -74,5 +74,9 @@ uninit_destroy(struct page *page)
 			uninit->aux = NULL;
 		}
 	}
+	if (page->frame){
+		free(page->frame);
+		page->frame = NULL;
+	}
 	return;
 }

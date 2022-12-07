@@ -5,7 +5,7 @@
 #include "vm/inspect.h"
 
 static void page_destroy(const struct hash_elem *p_, void *aux UNUSED);
-#define STACK_LIMIT USER_STACK - 0x100000
+#define STACK_LIMIT (USER_STACK - 0x100000)
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 
@@ -56,6 +56,8 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
 		struct page *new_pg = (struct page *)malloc(sizeof(struct page));
+		new_pg->is_writable = writable;
+		new_pg->not_present = true;
 		if (new_pg == NULL) goto err;
 		switch (type)
 		{
@@ -113,6 +115,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
+	if (hash_empty(&spt->spt_hash)) return;
 	hash_delete(&spt->spt_hash, &page->hash_elem);
 	if (page) vm_dealloc_page (page);
 	return true;
@@ -159,18 +162,12 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
-	// bool success = false;
 	void *stack_bottom = (void *) ((uint8_t *) thread_current()->stack_bottom);
-	// msg("================stack_growth===============");
-	// void *stack_bottom = thread_current()->stack_bottom - PGSIZE;
 	while (addr < stack_bottom){
 		stack_bottom -= PGSIZE;
 		vm_alloc_page_with_initializer(VM_ANON, stack_bottom, 1, NULL, NULL);
 		thread_current()->stack_bottom = stack_bottom;
-		// msg("addr = %p", addr);
-		// msg("stack_bottom = %p", stack_bottom);
 	}
-	// printf("thread_current->stack_bottom %p\n", thread_current()->stack_bottom);
 }
 
 /* Handle the fault on write_protected page */
@@ -244,6 +241,7 @@ vm_do_claim_page (struct page *page) {
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
+	page->not_present = false;
 	// printf("==========vm_do_claim_page============\n");
 	// printf("page %p\n", page);
 	// printf("page->va %p\n", page->va);
@@ -286,16 +284,6 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		}
 		success &= spt_insert_page(dst, dst_page);
 	}
-	// struct hash_iterator j;
-	// hash_first(&j, &dst->spt_hash);
-	// while (hash_next(&j)){
-	// 	struct page *dst_page = hash_entry(hash_cur(&j), struct page, hash_elem);
-	// 	if(spt_find_page(src, dst_page->va)->frame){
-	// 		if (vm_do_claim_page(dst_page)){
-	// 			memcpy(dst_page->frame->kva, spt_find_page(src, dst_page->va)->frame->kva, PGSIZE);
-	// 		}
-	// 	}
-	// }
 	return success;
 }
 
@@ -311,7 +299,6 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 		struct page *target = hash_entry (hash_cur(&i), struct page, hash_elem);
 		if (target) spt_remove_page(spt, target);
 	}
-	// msg("check spt_kill");
 	// hash_destroy(&spt->spt_hash, page_destroy);
 	// if(!hash_empty(&spt->spt_hash)) hash_destroy(&spt->spt_hash, page_hash);
 }
