@@ -70,8 +70,13 @@ uninit_destroy(struct page *page)
 	{
 		if (uninit->aux)
 		{
-			free(uninit->aux);
+			// free(uninit->aux);
+			uninit->aux = NULL;
 		}
+	}
+	if (page->frame){
+		free(page->frame);
+		page->frame = NULL;
 	}
 	return;
 }

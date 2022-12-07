@@ -25,22 +25,6 @@ vm_anon_init (void) {
 
 }
 
-// void anon_new (struct page *page, void *va, vm_initializer *init, enum vm_type type, void *aux,
-// 	bool (*initializer)(struct page *, enum vm_type, void *)){
-// 		ASSERT(page != NULL);
-
-// 		*page = (struct page) {
-// 			.operations = &anon_ops,
-// 			.va = va,
-// 			.frame = NULL,
-// 			.anon = (struct anon_page) {
-// 				.init = init,
-// 				.type = type,
-// 				.aux = aux,
-// 				.page_initializer = initializer,
-// 			}
-// 		};
-// 	}
 /* Initialize the file mapping */
 bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
@@ -49,7 +33,8 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	// page->frame->kva = kva;
 	struct anon_page *anon_page = &page->anon;
 	vm_initializer *init = anon_page->init;
-	void *aux = anon_page->aux;
+	anon_page->aux = page->uninit.aux;
+	// void *aux = anon_page->aux;
 	// task init_function.
 	return true;
 	// return anon_page->page_initializer (page, anon_page->type, kva) &&
@@ -77,11 +62,14 @@ anon_destroy (struct page *page) {
 	if (page){
 		if(anon_page) {
 			if (anon_page->aux){
-				free(anon_page->aux);
+				// free(anon_page->aux);
+				anon_page->aux = NULL;
 			}
 		}
-		// if(frame)
-		// 	free(frame);
+		if(frame){
+			page->frame = NULL;
+			free(frame);
+		}
 	}
 	return ;
 }

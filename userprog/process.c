@@ -729,19 +729,26 @@ install_page (void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-static bool
+bool
 lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
 	struct file_info *file_info = (struct file_info *)aux;
 	int temp;
+	// printf("check lazy_load_segment\n");
 	// vm_claim_page(page->va);
 	file_seek(file_info->file, file_info->ofs);
+	// printf("file_info %p\n", file_info);
 	// printf("file_info->ofs%p\n", file_info->ofs);
+	// printf("file_info->read_bytes %d\n", file_info->read_bytes);
+	// printf("file_info->file %p\n", file_info->file);
+	// printf("page->frame->kva %p\n", page->frame->kva);
+	// printf("file_length %d\n", file_length(file_info->file));
+	// hex_dump(page->frame->kva, page->frame->kva, PGSIZE, true);
 	if (temp = file_read(file_info->file, page->frame->kva, file_info->read_bytes) != file_info->read_bytes)
 	{
-		printf("check file read failed!\n");
+		printf("check temp %d\n", temp);
 		palloc_free_page(page->frame->kva);
 		return false;
 	}
@@ -813,7 +820,10 @@ setup_stack (struct intr_frame *if_) {
 	if(success)
 	{
 		success = vm_claim_page(stack_bottom);
-		if (success) if_->rsp = USER_STACK;
+		if (success) {
+			if_->rsp = USER_STACK;
+			thread_current()->stack_bottom = stack_bottom;
+		}
 	}
 	return success;
 }

@@ -50,10 +50,9 @@ hash_init (struct hash *h,
 void
 hash_clear (struct hash *h, hash_action_func *destructor) {
 	size_t i;
-
+	
 	for (i = 0; i < h->bucket_cnt; i++) {
 		struct list *bucket = &h->buckets[i];
-
 		if (destructor != NULL)
 			while (!list_empty (bucket)) {
 				struct list_elem *list_elem = list_pop_front (bucket);
@@ -63,7 +62,7 @@ hash_clear (struct hash *h, hash_action_func *destructor) {
 
 		list_init (bucket);
 	}
-
+	
 	h->elem_cnt = 0;
 }
 

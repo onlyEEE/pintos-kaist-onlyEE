@@ -50,6 +50,9 @@ struct page {
 
 	/* Your implementation */
 	struct hash_elem hash_elem; /* Hash table elem */
+	bool not_present;
+	bool is_writable;
+	bool is_shared;
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {
@@ -115,5 +118,4 @@ enum vm_type page_get_type (struct page *page);
 
 unsigned page_hash (const struct hash_elem *p_, void *aux UNUSED);
 bool page_less (const struct hash_elem *a_,const struct hash_elem *b_, void *aux UNUSED);
-
 #endif  /* VM_VM_H */

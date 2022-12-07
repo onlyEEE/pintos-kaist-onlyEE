@@ -4,8 +4,11 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
+static void page_destroy(const struct hash_elem *p_, void *aux UNUSED);
+#define STACK_LIMIT (USER_STACK - 0x100000)
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
+
 void
 vm_init (void) {
 	vm_anon_init ();
@@ -53,6 +56,8 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
 		struct page *new_pg = (struct page *)malloc(sizeof(struct page));
+		new_pg->is_writable = writable;
+		new_pg->not_present = true;
 		if (new_pg == NULL) goto err;
 		switch (type)
 		{
@@ -110,8 +115,9 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
+	if (hash_empty(&spt->spt_hash)) return;
 	hash_delete(&spt->spt_hash, &page->hash_elem);
-	// if (page) vm_dealloc_page (page);
+	if (page) vm_dealloc_page (page);
 	return true;
 }
 
@@ -156,6 +162,12 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+	void *stack_bottom = (void *) ((uint8_t *) thread_current()->stack_bottom);
+	while (addr < stack_bottom){
+		stack_bottom -= PGSIZE;
+		vm_alloc_page_with_initializer(VM_ANON, stack_bottom, 1, NULL, NULL);
+		thread_current()->stack_bottom = stack_bottom;
+	}
 }
 
 /* Handle the fault on write_protected page */
@@ -168,27 +180,32 @@ bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
+	// void* stack_bottom = &thread_current()->stack_bottom;
+	void *stack_bottom = (void *) (((uint8_t *) thread_current()->stack_bottom));
+	void *rsp = user ? f->rsp : thread_current()->user_rsp; 
+	// printf("stackbottom start %p\n", stack_bottom);
 	struct page *page = NULL;
 	if (is_kernel_vaddr(addr)){
 		return false;
 	}
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
-	page = spt_find_page(spt, addr);
 	// printf("[Debug]try_handle_fault\n");
 	// printf("[Debug]if_rsp : %p\n", f->rsp);
 	// printf("[Debug]fault_addr : %p\n", addr);
 	// printf("[Debug]thread_tid : %d\n", thread_tid());
+	// printf("[Debug]page->user : %d\n", user);
+	if (addr == NULL) return false;
+	else if (addr >= STACK_LIMIT && addr <= stack_bottom && addr >= rsp - 8){
+		vm_stack_growth(addr);
+	}
+	page = spt_find_page(spt, addr);
 	// printf("[Debug]spt_find_page : %p\n", page);
 	// printf("[Debug]page->frame : %p\n", page->frame);
-	if (addr == NULL) return false;
-	else if (page != NULL && page->frame == NULL)
-	{
-		
+	if (page != NULL && page->frame == NULL){	
 		return vm_do_claim_page (page);
 	}
-	else
-	{
+	else{
 		// printf("check fault false\n");
 		return false;
 	}
@@ -224,6 +241,7 @@ vm_do_claim_page (struct page *page) {
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
+	page->not_present = false;
 	// printf("==========vm_do_claim_page============\n");
 	// printf("page %p\n", page);
 	// printf("page->va %p\n", page->va);
@@ -266,16 +284,6 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		}
 		success &= spt_insert_page(dst, dst_page);
 	}
-	// struct hash_iterator j;
-	// hash_first(&j, &dst->spt_hash);
-	// while (hash_next(&j)){
-	// 	struct page *dst_page = hash_entry(hash_cur(&j), struct page, hash_elem);
-	// 	if(spt_find_page(src, dst_page->va)->frame){
-	// 		if (vm_do_claim_page(dst_page)){
-	// 			memcpy(dst_page->frame->kva, spt_find_page(src, dst_page->va)->frame->kva, PGSIZE);
-	// 		}
-	// 	}
-	// }
 	return success;
 }
 
@@ -285,13 +293,22 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
 	struct hash_iterator i;
-	hash_first (&i, &spt->spt_hash);
-	while (hash_next(&i)){
+	while (!hash_empty(&spt->spt_hash)){
+		hash_first (&i, &spt->spt_hash);
+		hash_next(&i);
 		struct page *target = hash_entry (hash_cur(&i), struct page, hash_elem);
 		if (target) spt_remove_page(spt, target);
 	}
+	// hash_destroy(&spt->spt_hash, page_destroy);
 	// if(!hash_empty(&spt->spt_hash)) hash_destroy(&spt->spt_hash, page_hash);
 }
+
+// static void
+// page_destroy(const struct hash_elem *p_, void *aux UNUSED){
+// 	struct page *target = hash_entry(p_, struct page, hash_elem);
+// 	printf("check page %p\n", target);
+// 	vm_dealloc_page (target);
+// }
 
 unsigned
 page_hash (const struct hash_elem *p_, void *aux UNUSED) {
