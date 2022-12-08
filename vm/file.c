@@ -106,16 +106,20 @@ do_munmap (void *addr) {
 	struct thread * curr = thread_current();
 	bool is_dirty = pml4_is_dirty(curr->pml4, addr);
 	struct page *page = spt_find_page(&curr->spt, addr);
-
 	struct file_info *file_info = page->file.aux;
-
 	if (page->not_present) return ;
 	if (addr != curr->open_addr)
 		return ;
 	if (is_dirty){
-		file_write(file_info->file, addr, file_info->read_bytes);
+		// printf("%s\n", page->frame->kva);
+		// printf("%s\n", addr);
+		// int checker = file_write(file_info->file, curr->open_addr, file_info->read_bytes);
+		file_write_at(file_info->file, addr, file_info->read_bytes, file_info->ofs);
+		// memcpy(addr, page->frame->kva, file_info->read_bytes);
+		// palloc_free_page(page->frame->kva);
 		pml4_set_dirty(curr->pml4, addr, 0);
 	}
-	if(spt_find_page(&curr->spt, addr))
-		spt_remove_page(&curr->spt, addr);
+	if(page)
+		spt_remove_page(&curr->spt, page);
+	curr->open_file_cnt--;
 }

@@ -748,7 +748,6 @@ lazy_load_segment (struct page *page, void *aux) {
 	// hex_dump(page->frame->kva, page->frame->kva, PGSIZE, true);
 	if (temp = file_read(file_info->file, page->frame->kva, file_info->read_bytes) != file_info->read_bytes)
 	{
-		printf("check temp %d\n", temp);
 		palloc_free_page(page->frame->kva);
 		return false;
 	}

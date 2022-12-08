@@ -118,7 +118,7 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	if (hash_empty(&spt->spt_hash)) return;
 	hash_delete(&spt->spt_hash, &page->hash_elem);
 	if (page) vm_dealloc_page (page);
-	return true;
+	return;
 }
 
 /* Get the struct frame, that will be evicted. */
