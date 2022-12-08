@@ -56,8 +56,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
 		struct page *new_pg = (struct page *)malloc(sizeof(struct page));
-		new_pg->is_writable = writable;
-		new_pg->not_present = true;
 		if (new_pg == NULL) goto err;
 		switch (type)
 		{
@@ -75,8 +73,11 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		}
 		/* TODO: Insert the page into the spt. */
 		uninit_new (new_pg, upage, init, type, aux, initializer);
+		new_pg->is_writable = writable;
+		new_pg->not_present = false;
 		spt_insert_page(spt, new_pg);
 	}
+	else goto err;
 	return true;
 err:
 	return false;
@@ -154,6 +155,8 @@ vm_get_frame (void) {
 	/*
 	TODO : if user pool memory is full, do evict.
 	*/
+	if (!is_kernel_vaddr(frame->kva))
+		PANIC("todo");
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
 	return frame;
@@ -188,6 +191,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	if (is_kernel_vaddr(addr)){
 		return false;
 	}
+	// if(!write && not_present== false) return false;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 	// printf("[Debug]try_handle_fault\n");
@@ -226,7 +230,7 @@ vm_claim_page (void *va UNUSED) {
 	/* TODO: Fill this function */
 	page = spt_find_page (&thread_current()->spt, va);
 	// if (page){
-		return vm_do_claim_page (page);
+	return vm_do_claim_page (page);
 	
 	// else{
 	// 	vm_alloc_page(VM_ANON, va, 1);
@@ -236,20 +240,21 @@ vm_claim_page (void *va UNUSED) {
 
 /* Claim the PAGE and set up the mmu. */
 static bool
-vm_do_claim_page (struct page *page) {
+ vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
-	page->not_present = false;
+	// page->not_present = false;
 	// printf("==========vm_do_claim_page============\n");
 	// printf("page %p\n", page);
 	// printf("page->va %p\n", page->va);
 	// printf("page->frame->kva %p\n", page->frame->kva);
 	// printf("frame->page->va %p\n", frame->page->va);
+	// printf("check in vm_do_claim_page page->writable %d\n", page->is_writable);
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	if (pml4_get_page(thread_current()->pml4, page->va) == NULL) {// table에 해당하는 값이 없으면
-		if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, 1)) // table에 해당하는 page 넣어주고,
+		if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->is_writable)) // table에 해당하는 page 넣어주고,
 			{
 				return false;
 			}
@@ -297,7 +302,8 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 		hash_first (&i, &spt->spt_hash);
 		hash_next(&i);
 		struct page *target = hash_entry (hash_cur(&i), struct page, hash_elem);
-		if (target) spt_remove_page(spt, target);
+		if (target->uninit.type == VM_FILE) munmap(target->va);
+		else spt_remove_page(spt, target);
 	}
 	// hash_destroy(&spt->spt_hash, page_destroy);
 	// if(!hash_empty(&spt->spt_hash)) hash_destroy(&spt->spt_hash, page_hash);

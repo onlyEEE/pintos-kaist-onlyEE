@@ -116,7 +116,6 @@ check_file_handle (int fd,
   const char *buf = buf_;
   size_t ofs = 0;
   size_t file_size;
-
   /* Warn about file of wrong size.  Don't fail yet because we
      may still be able to get more information by reading the
      file. */
@@ -134,12 +133,10 @@ check_file_handle (int fd,
       block_size = size - ofs;
       if (block_size > sizeof block)
         block_size = sizeof block;
-
       ret_val = read (fd, block, block_size);
       if (ret_val != block_size)
         fail ("read of %zu bytes at offset %zu in \"%s\" returned %zu",
               block_size, ofs, file_name, ret_val);
-
       compare_bytes (block, buf + ofs, block_size, ofs, file_name);
       ofs += block_size;
     }

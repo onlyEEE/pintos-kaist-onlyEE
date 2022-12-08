@@ -316,9 +316,9 @@ process_exit (void) {
 	}
 	palloc_free_multiple(curr->fd_table,FDT_PAGES);
 	file_close(curr->running);
+	process_cleanup ();//추후 실험 필요	
 	sema_up(&curr->wait_sema);
 	sema_down(&curr->free_sema);
-	process_cleanup ();//추후 실험 필요	
 }
 
 /* Free the current process's resources. */

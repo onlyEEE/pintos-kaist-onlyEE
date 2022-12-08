@@ -279,7 +279,13 @@ int read (int fd, void *buffer, unsigned size){
 	if (fd == NULL){
 		return -1;
 	}
-
+	struct page *page = spt_find_page(&cur->spt, buffer);
+	if (is_user_vaddr(buffer) || is_user_vaddr(buffer + size)) 
+	{
+		if (buffer < USER_STACK - 0x100000)
+			exit(-1);
+	}
+	
 	if (file == NULL || file == STDOUT){
 		return -1;
 	}
@@ -423,24 +429,25 @@ unsigned tell (int fd){
 
 void *
 mmap (void *addr, size_t length, int writable, int fd, off_t offset){
-	if (addr == NULL || length == NULL) return ;
-	if (offset % PGSIZE != 0 || pg_round_down(addr) != addr) return;
-	
+	if (addr <= 0 || length <= 0 || addr + length == NULL) return NULL;
+	if (addr + length > KERN_BASE || addr > KERN_BASE) return NULL;
+	if (offset % PGSIZE != 0 || pg_round_down(addr) != addr) return NULL;
+
 	enum intr_level old_level;
 	old_level = intr_disable();
 
 	struct file *file = find_file(fd);
 	void * mapped_addr = NULL;
 	file = file_reopen(file);
+	if (file_length(file) == 0) return NULL;
 	length = file_length(file) < length ? file_length(file) : length;
 	mapped_addr = do_mmap(addr, length, writable, file, offset);
-
 	intr_set_level(old_level);
 	if (mapped_addr != NULL)
 		return addr;
+	else return NULL;
 }
 
 void munmap(void * addr){
-	enum intr_level old_level;
 	do_munmap(addr);
 }

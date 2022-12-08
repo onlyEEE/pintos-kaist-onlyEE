@@ -30,11 +30,11 @@ bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	page->operations = &anon_ops;
-	// page->frame->kva = kva;
 	struct anon_page *anon_page = &page->anon;
 	vm_initializer *init = anon_page->init;
-	anon_page->aux = page->uninit.aux;
-	// void *aux = anon_page->aux;
+	// anon_page->aux = page->uninit.aux;
+	anon_page->type = type;
+	void *aux = anon_page->aux;
 	// task init_function.
 	return true;
 	// return anon_page->page_initializer (page, anon_page->type, kva) &&

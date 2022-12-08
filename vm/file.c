@@ -29,7 +29,7 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	struct file_page *file_page = &page->file;
 	vm_initializer *init = file_page->init;
 	file_page->aux = page->uninit.aux;
-	// page->is_dirty = false;
+	file_page->type = type;
 	
 	return true;
 }
@@ -73,11 +73,11 @@ do_mmap (void *addr, size_t length, int writable,
 	  addr도 마찬가지. fd가  STDIN, STDOUT 인 경우.
 	  기존 mapping page와 겹치는 경우.*/
 	if (file == STDIN || file == STDOUT) return NULL;
+	// if (!writable) file_deny_write(file);
 	struct thread * curr = thread_current();
 	struct supplemental_page_table *spt = &curr->spt;
 	void *init_addr = addr;
 	size_t zero_bytes = PGSIZE - (length % PGSIZE);
-
 	while (length > 0 || zero_bytes > 0) {
 		if (spt_find_page(spt, addr) != NULL) return NULL;
 		size_t page_read_bytes = length < PGSIZE ? length : PGSIZE;
@@ -110,11 +110,12 @@ do_munmap (void *addr) {
 	if (page->not_present) return ;
 	if (addr != curr->open_addr)
 		return ;
+
 	if (is_dirty){
 		// printf("%s\n", page->frame->kva);
-		// printf("%s\n", addr);
 		// int checker = file_write(file_info->file, curr->open_addr, file_info->read_bytes);
-		file_write_at(file_info->file, addr, file_info->read_bytes, file_info->ofs);
+		if (page->is_writable)
+			file_write_at(file_info->file, addr, file_info->read_bytes, file_info->ofs);
 		// memcpy(addr, page->frame->kva, file_info->read_bytes);
 		// palloc_free_page(page->frame->kva);
 		pml4_set_dirty(curr->pml4, addr, 0);
@@ -122,4 +123,5 @@ do_munmap (void *addr) {
 	if(page)
 		spt_remove_page(&curr->spt, page);
 	curr->open_file_cnt--;
+
 }
