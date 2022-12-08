@@ -441,5 +441,6 @@ mmap (void *addr, size_t length, int writable, int fd, off_t offset){
 }
 
 void munmap(void * addr){
-	// do_munmap(addr);
+	enum intr_level old_level;
+	do_munmap(addr);
 }
