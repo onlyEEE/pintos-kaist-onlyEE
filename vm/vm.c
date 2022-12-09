@@ -280,12 +280,17 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct page *src_page = hash_entry (hash_cur(&i), struct page, hash_elem);
 		struct page *dst_page = (struct page *)malloc(sizeof(struct page));
 		memcpy(dst_page, src_page, sizeof(struct page));
-		// success &= vm_alloc_page_with_initializer(page_get_type(src_page), src_page->va, 1, src_page->uninit.init, src_page->uninit.aux);
 		if (src_page->frame){
 			if (vm_do_claim_page(dst_page))
 			{
 				memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
-				// hex_dump(dst_page->frame->kva, dst_page->frame->kva, PGSIZE, true);
+				if(src_page->file.type == VM_FILE) {
+					struct file_info * file_info = (struct file_info *)malloc(sizeof file_info);
+					memcpy(file_info, (struct file_info *)src_page->uninit.aux, sizeof(file_info));
+					file_info->file = file_reopen(file_info->file);
+					thread_current()->open_addr = dst_page->va;
+					dst_page->uninit.aux = file_info;
+				}
 			}
 		}
 		success &= spt_insert_page(dst, dst_page);
