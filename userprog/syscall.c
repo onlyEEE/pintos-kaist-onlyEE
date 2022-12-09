@@ -36,6 +36,7 @@ unsigned tell (int fd);
 int add_file(struct file *file);
 int dup2(int oldfd, int newfd);
 void remove_file(int fd);
+void check_valid_buffer (void *buffer, size_t size, bool to_write, void* rsp);
 void *mmap (void *addr, size_t length, int writable, int fd, off_t offset);
 void munmap(void * addr);
 /* System call.
@@ -104,9 +105,11 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		f->R.rax = filesize(f->R.rdi);
 		break;
 	case SYS_READ:
+		check_valid_buffer(f->R.rsi, f->R.rdx, 0, f->rsp);
 		f->R.rax = read(f->R.rdi,f->R.rsi,f->R.rdx);
 		break;
 	case SYS_WRITE:
+		check_valid_buffer(f->R.rsi, f->R.rdx, 1, f->rsp);
 		f->R.rax = write(f->R.rdi,f->R.rsi,f->R.rdx);
 		break;
 	case SYS_FORK:
@@ -179,6 +182,38 @@ void check_address(void* addr){
 		exit(-1);
 	}
 	#endif
+}
+
+void check_valid_buffer (void *buffer, size_t size, bool to_write, void* rsp){
+	check_address(buffer);
+	check_address(buffer+size);
+	struct thread *curr = thread_current();
+	while ((int)size > 0){
+		struct page* page = spt_find_page(&curr->spt, buffer);
+		// printf("size %d\n", size);
+		// printf("find buffer %p\n", buffer + KERN_BASE);
+		// // printf("check rsp %p\n", rsp);
+		// printf("is user_pte? %p\n", rsp);
+		// printf("find page->va %p\n", page->frame->kva);
+		// printf("find page->va %p\n", stack_page->frame->kva);
+		// printf("check (uint64_t) page->va * 1 << 10 %p\n",(uint64_t) page->va * 1 << 12);
+		if(page == NULL) exit(-1);
+		if(rsp > buffer && page->is_writable == false) exit(-1);
+		if(to_write == true)
+		{
+			if(&page->file != NULL){
+				struct file_info *file_info = page->file.aux;
+				if(file_info->file->deny_write == 1) exit(-1);
+			}
+			else{
+				if (page->is_writable == false) exit(-1);
+			}
+			
+			
+		}
+		size -= PGSIZE;
+		// size -= 1;
+	}
 }
 
 /* Project2-3 System Call */
@@ -272,7 +307,6 @@ int filesize (int fd){
 
 /* Project2-3 System Call */
 int read (int fd, void *buffer, unsigned size){
-	check_address(buffer);
 	off_t char_count = 0;
 	struct thread *cur = thread_current();
 	struct file *file = find_file(fd);
@@ -280,11 +314,13 @@ int read (int fd, void *buffer, unsigned size){
 		return -1;
 	}
 	struct page *page = spt_find_page(&cur->spt, buffer);
-	if (is_user_vaddr(buffer) || is_user_vaddr(buffer + size)) 
-	{
-		if (buffer < USER_STACK - 0x100000)
-			exit(-1);
-	}
+	// printf("check buffer %p\n", page->frame);
+
+	// if (page->frame) 
+	// {
+	// // 	if (buffer + size < USER_STACK - 0x100000)
+	// 		exit(-1);
+	// }
 	
 	if (file == NULL || file == STDOUT){
 		return -1;
@@ -320,11 +356,9 @@ int read (int fd, void *buffer, unsigned size){
 
 /* Project2-3 System Call */
 int write (int fd, const void *buffer, unsigned size) {
-	check_address(buffer);
 	off_t write_size = 0;
 	struct thread *cur = thread_current();
 	struct file *file = find_file(fd);
-
 	if (fd == NULL){
 		return -1;
 	}
@@ -429,7 +463,7 @@ unsigned tell (int fd){
 
 void *
 mmap (void *addr, size_t length, int writable, int fd, off_t offset){
-	if (addr <= 0 || length <= 0 || addr + length == NULL) return NULL;
+	if (addr <= 0 || (int) length <= 0) return NULL;
 	if (addr + length > KERN_BASE || addr > KERN_BASE) return NULL;
 	if (offset % PGSIZE != 0 || pg_round_down(addr) != addr) return NULL;
 

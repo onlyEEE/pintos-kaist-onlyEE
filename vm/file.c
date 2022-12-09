@@ -114,11 +114,12 @@ do_munmap (void *addr) {
 	if (is_dirty){
 		// printf("%s\n", page->frame->kva);
 		// int checker = file_write(file_info->file, curr->open_addr, file_info->read_bytes);
-		if (page->is_writable)
+		if (page->is_writable){
 			file_write_at(file_info->file, addr, file_info->read_bytes, file_info->ofs);
+			pml4_set_dirty(curr->pml4, addr, 0);
+		}
 		// memcpy(addr, page->frame->kva, file_info->read_bytes);
 		// palloc_free_page(page->frame->kva);
-		pml4_set_dirty(curr->pml4, addr, 0);
 	}
 	if(page)
 		spt_remove_page(&curr->spt, page);

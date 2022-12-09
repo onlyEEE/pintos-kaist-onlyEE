@@ -5,7 +5,7 @@
 #include "vm/inspect.h"
 
 static void page_destroy(const struct hash_elem *p_, void *aux UNUSED);
-#define STACK_LIMIT (USER_STACK - 0x100000)
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 
@@ -74,7 +74,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		/* TODO: Insert the page into the spt. */
 		uninit_new (new_pg, upage, init, type, aux, initializer);
 		new_pg->is_writable = writable;
-		new_pg->not_present = false;
+		new_pg->not_present = true;
 		spt_insert_page(spt, new_pg);
 	}
 	else goto err;
@@ -90,7 +90,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	if (page == NULL) return NULL;
 	struct page *ret = NULL;
 	struct hash_elem *e = NULL;
-	page->va = pg_round_down(va);
+	
 	e = hash_find(&spt->spt_hash, &page->hash_elem);
 	if (e)
 		ret = hash_entry(e, struct page, hash_elem);
@@ -259,6 +259,7 @@ static bool
 				return false;
 			}
 	}
+	page->not_present=false;
 	return swap_in (page, frame->kva);
 }
 
