@@ -17,7 +17,7 @@
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
-void check_address(void* addr);
+void *check_address(void* addr);
 void halt(void);
 void exit(int status);
 bool create(const char *file, unsigned initial_size);
@@ -171,25 +171,25 @@ int dup2(int oldfd, int newfd) {
 }
 
 /* Project2-2 User Memory Access */
-void check_address(void* addr){
+void *check_address(void* addr){
 	struct thread* curr = thread_current();
+	void *page = NULL;
+	if(!is_user_vaddr(addr) || addr == NULL) exit(-1);
 	#ifdef VM
-	if(!is_user_vaddr(addr) || addr == NULL || spt_find_page(&curr->spt.spt_hash, addr) == NULL){
-		exit(-1);
-	}
+		page = (void *)spt_find_page(&curr->spt.spt_hash, addr);
+		if (page == NULL)
+			exit(-1);		
 	#else
-	if(!is_user_vaddr(addr) || addr == NULL || pml4_get_page(curr->pml4, addr) == NULL){
-		exit(-1);
-	}
+		page = pml4_get_page(curr->pml4, addr);
+		if (page == NULL)
+			exit(-1);
 	#endif
+	return page;
 }
 
 void check_valid_buffer (void *buffer, size_t size, bool to_write, void* rsp){
-	check_address(buffer);
-	check_address(buffer+size);
-	struct thread *curr = thread_current();
 	while ((int)size > 0){
-		struct page* page = spt_find_page(&curr->spt, buffer);
+		struct page* page = (struct page*)check_address(buffer);
 		// printf("size %d\n", size);
 		// printf("find buffer %p\n", buffer + KERN_BASE);
 		// // printf("check rsp %p\n", rsp);
@@ -198,18 +198,15 @@ void check_valid_buffer (void *buffer, size_t size, bool to_write, void* rsp){
 		// printf("find page->va %p\n", stack_page->frame->kva);
 		// printf("check (uint64_t) page->va * 1 << 10 %p\n",(uint64_t) page->va * 1 << 12);
 		if(page == NULL) exit(-1);
-		if(rsp > buffer && page->is_writable == false) exit(-1);
 		if(to_write == true)
 		{
-			if(&page->file != NULL){
+			if(page->file.type == VM_FILE){
 				struct file_info *file_info = page->file.aux;
-				if(file_info->file->deny_write == 1) exit(-1);
+				if(file_info->file->deny_write == 0) exit(-1);
 			}
-			else{
-				if (page->is_writable == false) exit(-1);
-			}
-			
-			
+		}
+		else {
+			if(rsp > buffer && page->is_writable == false) exit(-1);
 		}
 		size -= PGSIZE;
 		// size -= 1;
