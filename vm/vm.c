@@ -3,21 +3,19 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
-// #include "threads/mmu.h"
+#include "threads/mmu.h"
+#include "lib/kernel/list.h"
 
 static void page_destroy(const struct hash_elem *p_, void *aux UNUSED);
 
-// static struct list frame_table;
-// struct list_elem *start;
-// struct lock lock;
+static struct list_elem *start;
+static struct lock lock_vm;
+static struct list frame_table;
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 
 void
 vm_init (void) {
-	// list_init(&frame_table);
-	// lock_init(&lock);
-	// start = NULL;
 	vm_anon_init ();
 	vm_file_init ();
 #ifdef EFILESYS  /* For project 4 */
@@ -25,6 +23,9 @@ vm_init (void) {
 #endif
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
+	start = NULL;
+	lock_init(&lock_vm);
+	list_init(&frame_table);
 	/* TODO: Your code goes here. */
 }
 
@@ -99,13 +100,13 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct hash_elem *e = NULL;
 	page->va = pg_round_down(va);
 	e = hash_find(&spt->spt_hash, &page->hash_elem);
-	if (e)
+	free(page);
+	if (e){
 		ret = hash_entry(e, struct page, hash_elem);
+	}
 	else {
-		free(page);
 		return NULL;
 	}
-	free(page);
 	return ret;
 }
 
@@ -183,20 +184,27 @@ static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
-	frame = (struct frame *)malloc(sizeof frame);
-	frame->kva = palloc_get_page(PAL_USER);
+	void *new_kva = palloc_get_page(PAL_USER);
+	if (new_kva == NULL)
+	{
+		PANIC("todo");
+		// free(frame);
+		// return NULL;
+	}
+	else{
+		frame = (struct frame *)malloc(sizeof frame);
+		frame->kva = new_kva;
+		frame->page = NULL;
+	}
 	// printf("[Debug] frame->kva %p\n", frame->kva);
-	frame->page = NULL;
+	frame->thread = thread_current();
+	list_push_back(&frame_table, &frame->list_e);
 	/*
 	TODO : if user pool memory is full, do evict.
 	*/
-	if(!is_kernel_vaddr(frame->kva)){
-		// free(frame);
-		// return NULL;
-		PANIC("todo");
-	}
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
+	
 	return frame;
 }
 
@@ -269,6 +277,7 @@ vm_claim_page (void *va UNUSED) {
 	/* TODO: Fill this function */
 	page = spt_find_page (&thread_current()->spt, va);
 	// if (page){
+	// printf("check\n");
 	return vm_do_claim_page (page);
 	
 	// else{
@@ -281,23 +290,20 @@ vm_claim_page (void *va UNUSED) {
 static bool
  vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
-	// if (frame == NULL)
-	// {
-	// 	frame = vm_evict_frame();
-	// 	if (frame == NULL) exit(-999);
-	// 	swap_out(frame->page);
-	// 	frame = vm_get_frame();
-	// }
+	if (frame == NULL)
+	{
+		frame = vm_evict_frame();
+		if (frame == NULL) exit(-999);
+		swap_out(frame->page);
+		frame = vm_get_frame();
+	}
 
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
 	
 	// page->not_present = false;
-	// printf("==========vm_do_claim_page============\n");
-	// printf("page %p\n", page);
-	// printf("page->va %p\n", page->va);
-	// printf("page->frame->kva %p\n", page->frame->kva);
+	// printf("page %p\n", page->va);
 	// printf("frame->page->va %p\n", frame->page->va);
 	// printf("check in vm_do_claim_page page->writable %d\n", page->is_writable);
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
@@ -307,9 +313,10 @@ static bool
 				return false;
 			}
 	}
-	// list_push_back(&frame_table, &frame->list_elem);
+	// printf("frame_table %p\n", &frame_table);
+	// printf("frame_table begin %p\n", list_begin(&frame_table));
+	// printf("frame->list_elem %p\n", &frame->list_elem);
 	page->not_present=false;
-	// frame->thread = thread_current();
 	return swap_in (page, frame->kva);
 }
 

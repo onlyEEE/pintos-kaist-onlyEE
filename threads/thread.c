@@ -564,7 +564,6 @@ init_thread (struct thread *t, const char *name, int priority) {
 	sema_init(&t->wait_sema,0);
 	sema_init(&t->free_sema,0);
 	#ifdef	VM
-	t->open_file_cnt = 0;
 	t->open_addr = NULL;
 	// t->swap_cnt = 0;
 	#endif

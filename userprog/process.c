@@ -272,6 +272,7 @@ process_exec (void *f_name) {
 	if (!success)
 		return -1;
 
+	// printf("check rsp %p\n", thread_current()->tf.R.r);
 	/* Start switched process. */
 	do_iret (&_if);
 	NOT_REACHED ();
@@ -328,7 +329,6 @@ process_cleanup (void) {
 	struct thread *curr = thread_current ();
 
 #ifdef VM
-	// bitmap_destroy(curr->swap_table);
 	supplemental_page_table_kill (&curr->spt);
 #endif
 	uint64_t *pml4;
@@ -539,7 +539,8 @@ load (const char *file_name, struct intr_frame *if_) {
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	argument_stack(argument_list, argument_count, if_);
 	success = true;
-
+	printf("checkout load success %d\n", success);
+	goto done;
 done:
 	/* We arrive here whether the load is successful or not. */
 	//file_close (file);
@@ -738,7 +739,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: VA is available when calling this function. */
 	struct file_info *file_info = (struct file_info *)aux;
 	int temp;
-	// printf("check lazy_load_segment\n");
+	printf("check lazy_load_segment\n");
 	// vm_claim_page(page->va);
 	file_seek(file_info->file, file_info->ofs);
 	// printf("file_info %p\n", file_info);

@@ -96,7 +96,6 @@ do_mmap (void *addr, size_t length, int writable,
 		addr += PGSIZE;
 	}
 	curr->open_addr = init_addr;
-	curr->open_file_cnt++;
 	return init_addr;
 }
 
@@ -123,5 +122,4 @@ do_munmap (void *addr) {
 		// palloc_free_page(page->frame->kva);
 	}
 	spt_remove_page(&curr->spt, page);
-	curr->open_file_cnt--;
 }
