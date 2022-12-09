@@ -7,7 +7,7 @@
 #include <string.h>
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
-#include "filesys/directory.h"
+#include "filesys/directory.h"`
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "threads/flags.h"
@@ -158,6 +158,7 @@ __do_fork (void *aux) {
 	struct thread *parent = (struct thread *) aux;
 	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
+	
 	struct intr_frame *parent_if;
 	bool succ = true;
 	parent_if = &parent->parent_if;
@@ -327,6 +328,7 @@ process_cleanup (void) {
 	struct thread *curr = thread_current ();
 
 #ifdef VM
+	bitmap_destroy(curr->swap_table);
 	supplemental_page_table_kill (&curr->spt);
 #endif
 	uint64_t *pml4;
@@ -547,13 +549,13 @@ done:
 /* Argument Passing */
 void argument_stack(char ** parse, int count, struct intr_frame* if_){
 	char* pointer_address[128];
-	int algin_size = 0;
+	int align_size = 0;
 	int i,j;
 	/* 문자열 할당 */
 	for(i = count - 1; i > -1 ; i--){
-		algin_size = strlen(parse[i]) + 1;
-		if_->rsp = if_->rsp - algin_size;
-		memcpy(if_->rsp, parse[i], algin_size);
+		align_size = strlen(parse[i]) + 1;
+		if_->rsp = if_->rsp - align_size;
+		memcpy(if_->rsp, parse[i], align_size);
 		pointer_address[i] = if_->rsp;
 	}
 
@@ -738,6 +740,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	int temp;
 	// printf("check lazy_load_segment\n");
 	// vm_claim_page(page->va);
+	printf("checkout lazy_load_segment 1============\n");
 	file_seek(file_info->file, file_info->ofs);
 	// printf("file_info %p\n", file_info);
 	// printf("file_info->ofs%p\n", file_info->ofs);
@@ -746,6 +749,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	// printf("page->frame->kva %p\n", page->frame->kva);
 	// printf("file_length %d\n", file_length(file_info->file));
 	// hex_dump(page->frame->kva, page->frame->kva, PGSIZE, true);
+	printf("checkout lazy_load_segment 2============\n");
 	if (temp = file_read(file_info->file, page->frame->kva, file_info->read_bytes) != file_info->read_bytes)
 	{
 		palloc_free_page(page->frame->kva);
@@ -754,6 +758,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	// printf("file_info->read_bytes=%d\nfile_info->zero_bytes=%d\n", file_info->read_bytes, file_info->zero_bytes);
 	// printf("temp %d\n", temp);
 	// printf("pml4 page%p\n", pml4_get_page(thread_current()->pml4, page->va));
+	printf("checkout lazy_load_segment 3============\n");
 	memset(page->frame->kva + file_info->read_bytes, 0, file_info->zero_bytes);
 	return true;
 }
@@ -820,6 +825,7 @@ setup_stack (struct intr_frame *if_) {
 	if(success)
 	{
 		success = vm_claim_page(stack_bottom);
+	printf("=============check setup_stack %d\n", success);
 		if (success) {
 			if_->rsp = USER_STACK;
 			thread_current()->stack_bottom = stack_bottom;

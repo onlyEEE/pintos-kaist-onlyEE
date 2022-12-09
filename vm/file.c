@@ -120,9 +120,8 @@ do_munmap (void *addr) {
 			pml4_set_dirty(curr->pml4, addr, 0);
 		}
 		// memcpy(addr, page->frame->kva, file_info->read_bytes);
-		// palloc_free_page(page->frame->kva);
+		palloc_free_page(page->frame->kva);
 	}
 	spt_remove_page(&curr->spt, page);
 	curr->open_file_cnt--;
-
 }
