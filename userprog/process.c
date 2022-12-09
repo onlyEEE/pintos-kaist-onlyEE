@@ -317,8 +317,8 @@ process_exit (void) {
 	palloc_free_multiple(curr->fd_table,FDT_PAGES);
 	file_close(curr->running);
 	sema_up(&curr->wait_sema);
-	sema_down(&curr->free_sema);
 	process_cleanup ();//추후 실험 필요	
+	sema_down(&curr->free_sema);
 }
 
 /* Free the current process's resources. */
@@ -792,6 +792,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		aux_file->ofs = ofs;
 		aux_file->read_bytes = page_read_bytes;
 		aux_file->zero_bytes = page_zero_bytes;
+
 		void *aux = aux_file;
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
 					writable, lazy_load_segment, aux))
