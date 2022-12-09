@@ -7,17 +7,14 @@
 
 static void page_destroy(const struct hash_elem *p_, void *aux UNUSED);
 
-// static struct list frame_table;
-// struct list_elem *start;
-// struct lock lock;
+static struct list frame_table;
+struct list_elem *start;
+struct lock lock;
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 
 void
 vm_init (void) {
-	// list_init(&frame_table);
-	// lock_init(&lock);
-	// start = NULL;
 	vm_anon_init ();
 	vm_file_init ();
 #ifdef EFILESYS  /* For project 4 */
@@ -26,6 +23,9 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+	list_init(&frame_table);
+	lock_init(&lock);
+	start = NULL;
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -179,24 +179,58 @@ vm_evict_frame (void) {
  * and return it. This always return valid address. That is, if the user pool
  * memory is full, this function evicts the frame to get the available memory
  * space.*/
+// static struct frame *
+// vm_get_frame (void) {
+// 	struct frame *frame = NULL;
+// 	/* TODO: Fill this function. */
+// 	frame = (struct frame *)malloc(sizeof frame);
+// 	frame->kva = palloc_get_page(PAL_USER);
+// 	// printf("[Debug] frame->kva %p\n", frame->kva);
+// 	frame->page = NULL;
+// 	/*
+// 	TODO : if user pool memory is full, do evict.
+// 	*/
+// 	if(!is_kernel_vaddr(frame->kva)){
+// 		// free(frame);
+// 		// return NULL;
+// 		PANIC("todo");
+// 	}
+// 	ASSERT (frame != NULL);
+// 	ASSERT (frame->page == NULL);
+// 	return frame;
+// }
+
 static struct frame *
-vm_get_frame (void) {
+vm_get_frame(void)
+{
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
-	frame = (struct frame *)malloc(sizeof frame);
-	frame->kva = palloc_get_page(PAL_USER);
-	// printf("[Debug] frame->kva %p\n", frame->kva);
-	frame->page = NULL;
-	/*
-	TODO : if user pool memory is full, do evict.
-	*/
-	if(!is_kernel_vaddr(frame->kva)){
-		// free(frame);
-		// return NULL;
-		PANIC("todo");
+	// printf("vm_get_frame\n");
+	void *new_kva = palloc_get_page(PAL_USER); // 유저 풀에서 새로운 물리 페이지를 가져온다
+	// printf("new_kva = %p\n", new_kva);
+	if (new_kva == NULL)
+	{
+		// printf("이제 frame이 없어유\n");
+		frame = vm_evict_frame();
+		if (frame ==NULL)
+			PANIC("todo"); // 쫓아낼 프레임도 없으면 패닉
 	}
-	ASSERT (frame != NULL);
-	ASSERT (frame->page == NULL);
+	else
+	{
+		// 프레임 초기화
+		frame = (struct frame *)malloc(sizeof(struct frame)); // [3-1?] 프레임 할당은 어디서 해오지????!!@!!@!!@!!@!@malloc을 하라
+		frame->kva = new_kva;
+		frame->page = NULL;
+	}
+	frame->thread = thread_current();
+
+	// lock_acquire(&lru_list_lock);
+	list_push_back(&frame_table, &frame->list_elem);
+	// [3-1?] 다른 멤버들 초기화 필요? (operations, union)
+	// lock_release(&lru_list_lock);
+
+	ASSERT(frame != NULL);
+	ASSERT(frame->page == NULL);
 	return frame;
 }
 

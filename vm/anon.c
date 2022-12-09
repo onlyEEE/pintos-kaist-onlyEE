@@ -53,10 +53,10 @@ anon_swap_in (struct page *page, void *kva) {
 	// printf("check swap_in\n");
 	struct anon_page *anon_page = &page->anon;
 	// if (page->bit_idx > bitmap_size(swap_table)) return false;
-	// bitmap_set(swap_table, page->bit_idx, 0);
+	// bitmap_set(swap_table, page->bit_idx, 1);
 	// lock_acquire(&lock);
 	// for (int i = 0; i < 8; i++)
-	// 	disk_read(swap_disk, (page->bit_idx)*8 + i, page->va);
+		// disk_read(swap_disk, (page->bit_idx)*8 + i, page->va);
 	// lock_release(&lock);
 	// vm_claim_page(page->va);
 	// page->bit_idx = bitmap_size(swap_table) + 1;
