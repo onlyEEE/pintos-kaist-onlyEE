@@ -566,7 +566,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	#ifdef	VM
 	t->open_file_cnt = 0;
 	t->open_addr = NULL;
-	t->swap_cnt = 0;
+	// t->swap_cnt = 0;
 	#endif
 	/* Advanced Scheduler */
 	t->nice = NICE_DEFAULT;

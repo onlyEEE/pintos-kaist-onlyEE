@@ -51,7 +51,6 @@ uninit_initialize(struct page *page, void *kva)
 	vm_initializer *init = uninit->init; // lazy_load_segment.
 	void *aux = uninit->aux;
 	/* TODO: You may need to fix this function. */
-	printf("check out uninit=========\n");
 	return uninit->page_initializer(page, uninit->type, kva) &&
 		   (init ? init(page, aux) : true); // do lazy_load_segemnt
 }
