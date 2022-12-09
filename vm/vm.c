@@ -3,21 +3,21 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
-#include "threads/mmu.h"
+// #include "threads/mmu.h"
 
 static void page_destroy(const struct hash_elem *p_, void *aux UNUSED);
 
-static struct list frame_table;
-struct list_elem *start;
-struct lock lock;
+// static struct list frame_table;
+// struct list_elem *start;
+// struct lock lock;
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 
 void
 vm_init (void) {
-	list_init(&frame_table);
-	lock_init(&lock);
-	start = NULL;
+	// list_init(&frame_table);
+	// lock_init(&lock);
+	// start = NULL;
 	vm_anon_init ();
 	vm_file_init ();
 #ifdef EFILESYS  /* For project 4 */
@@ -133,29 +133,29 @@ static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
 	 /* TODO: The policy for eviction is up to you. */
-	if(start == NULL)
-		start = list_begin(&frame_table);
-	while (start != list_tail(&frame_table)){
-		victim = list_entry(start, struct frame, list_elem);
-		struct thread *t = victim->thread;
-		if (pml4_is_accessed(t->pml4, victim->kva))
-			pml4_set_accessed(t->pml4, victim->kva, 0);
-		else{
-			return victim;
-		}
-		list_next(start);
-	}
-	start = list_begin(&frame_table);
-	while (start != list_tail(&frame_table)){
-		victim = list_entry(start, struct frame, list_elem);
-		struct thread *t = victim->thread;
-		if (pml4_is_accessed(t->pml4, victim->kva))
-			pml4_set_accessed(t->pml4, victim->kva, 0);
-		else{
-			return victim;
-		}
-		list_next(start);
-	}
+	// if(start == NULL)
+	// 	start = list_begin(&frame_table);
+	// while (start != list_tail(&frame_table)){
+	// 	victim = list_entry(start, struct frame, list_elem);
+	// 	struct thread *t = victim->thread;
+	// 	if (pml4_is_accessed(t->pml4, victim->kva))
+	// 		pml4_set_accessed(t->pml4, victim->kva, 0);
+	// 	else{
+	// 		return victim;
+	// 	}
+	// 	list_next(start);
+	// }
+	// start = list_begin(&frame_table);
+	// while (start != list_tail(&frame_table)){
+	// 	victim = list_entry(start, struct frame, list_elem);
+	// 	struct thread *t = victim->thread;
+	// 	if (pml4_is_accessed(t->pml4, victim->kva))
+	// 		pml4_set_accessed(t->pml4, victim->kva, 0);
+	// 	else{
+	// 		return victim;
+	// 	}
+	// 	list_next(start);
+	// }
 	return victim;
 }
 
@@ -163,15 +163,15 @@ vm_get_victim (void) {
  * Return NULL on error.*/
 static struct frame *
 vm_evict_frame (void) {
-	lock_acquire(&lock);
+	// lock_acquire(&lock);
 	struct frame *victim UNUSED = vm_get_victim ();
-	lock_release(&lock);
-	/* TODO: swap out the victim and return the evicted frame. */
-	if (victim){
-		list_remove(&victim->list_elem);
-		victim->thread = NULL;
-		return victim;
-	}
+	// lock_release(&lock);
+	// /* TODO: swap out the victim and return the evicted frame. */
+	// if (victim){
+	// 	list_remove(&victim->list_elem);
+	// 	victim->thread = NULL;
+	// 	return victim;
+	// }
 	return NULL;
 }
 
@@ -191,8 +191,9 @@ vm_get_frame (void) {
 	TODO : if user pool memory is full, do evict.
 	*/
 	if(!is_kernel_vaddr(frame->kva)){
-		free(frame);
-		return NULL;
+		// free(frame);
+		// return NULL;
+		PANIC("todo");
 	}
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -280,13 +281,13 @@ vm_claim_page (void *va UNUSED) {
 static bool
  vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
-	if (frame == NULL)
-	{
-		frame = vm_evict_frame();
-		if (frame == NULL) exit(-999);
-		swap_out(frame->page);
-		frame = vm_get_frame();
-	}
+	// if (frame == NULL)
+	// {
+	// 	frame = vm_evict_frame();
+	// 	if (frame == NULL) exit(-999);
+	// 	swap_out(frame->page);
+	// 	frame = vm_get_frame();
+	// }
 
 	/* Set links */
 	frame->page = page;
@@ -306,9 +307,9 @@ static bool
 				return false;
 			}
 	}
-	list_push_back(&frame_table, &frame->list_elem);
+	// list_push_back(&frame_table, &frame->list_elem);
 	page->not_present=false;
-	frame->thread = thread_current();
+	// frame->thread = thread_current();
 	return swap_in (page, frame->kva);
 }
 
@@ -357,7 +358,7 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 		hash_first (&i, &spt->spt_hash);
 		hash_next(&i);
 		struct page *target = hash_entry (hash_cur(&i), struct page, hash_elem);
-		list_remove(&target->frame->list_elem);
+		// list_remove(&target->frame->list_elem);
 		if (target->uninit.type == VM_FILE) munmap(target->va);
 		else spt_remove_page(spt, target);
 	}
