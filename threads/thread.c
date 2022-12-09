@@ -327,7 +327,6 @@ thread_exit (void) {
 #ifdef USERPROG
 	process_exit ();
 #endif
-
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
 	intr_disable ();
@@ -564,10 +563,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 	sema_init(&t->fork_sema,0);
 	sema_init(&t->wait_sema,0);
 	sema_init(&t->free_sema,0);
-	// #ifdef	VM
+	#ifdef	VM
 	t->open_file_cnt = 0;
 	t->open_addr = NULL;
-	// #endif
+	t->swap_cnt = 0;
+	#endif
 	/* Advanced Scheduler */
 	t->nice = NICE_DEFAULT;
 	t->recent_cpu = RECENT_CPU_DEFAULT;

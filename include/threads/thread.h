@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "threads/interrupt.h"
 #include "threads/synch.h"
+#include "lib/kernel/bitmap.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -146,8 +147,9 @@ struct thread {
 	void * user_rsp;
 	void * open_addr;
 	int open_file_cnt;
+	unsigned int swap_cnt;
+	struct bitmap *swap_table;
 #endif
-
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */

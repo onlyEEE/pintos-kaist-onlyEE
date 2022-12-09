@@ -191,7 +191,7 @@ void check_valid_buffer (void *buffer, size_t size, bool to_write, void* rsp){
 	while ((int)size > 0){
 		struct page* page = (struct page*)check_address(buffer);
 		// printf("size %d\n", size);
-		// printf("find buffer %p\n", buffer + KERN_BASE);
+		// printf("find buffer %p\n", buffer);
 		// // printf("check rsp %p\n", rsp);
 		// printf("is user_pte? %p\n", rsp);
 		// printf("find page->va %p\n", page->frame->kva);
