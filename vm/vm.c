@@ -8,9 +8,11 @@
 
 static void page_destroy(const struct hash_elem *p_, void *aux UNUSED);
 
+
 struct list frame_table;
 struct list_elem *start;
 struct lock lock_vm;
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 
@@ -182,8 +184,30 @@ vm_evict_frame (void) {
  * and return it. This always return valid address. That is, if the user pool
  * memory is full, this function evicts the frame to get the available memory
  * space.*/
+// static struct frame *
+// vm_get_frame (void) {
+// 	struct frame *frame = NULL;
+// 	/* TODO: Fill this function. */
+// 	frame = (struct frame *)malloc(sizeof frame);
+// 	frame->kva = palloc_get_page(PAL_USER);
+// 	// printf("[Debug] frame->kva %p\n", frame->kva);
+// 	frame->page = NULL;
+// 	/*
+// 	TODO : if user pool memory is full, do evict.
+// 	*/
+// 	if(!is_kernel_vaddr(frame->kva)){
+// 		// free(frame);
+// 		// return NULL;
+// 		PANIC("todo");
+// 	}
+// 	ASSERT (frame != NULL);
+// 	ASSERT (frame->page == NULL);
+// 	return frame;
+// }
+
 static struct frame *
-vm_get_frame (void) {
+vm_get_frame(void)
+{
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
 	void *new_kva = palloc_get_page(PAL_USER);

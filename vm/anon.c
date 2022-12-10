@@ -52,6 +52,7 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 anon_swap_in (struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
+
 	// printf("check swap_in page->bit_idx %d\n", anon_page->bit_idx);
 	// printf("check swap_in page->va %p\n", page->va);
 	// printf("check swapin bitmap_test %d\n", bitmap_test(swap_table, anon_page->bit_idx));
@@ -65,7 +66,6 @@ anon_swap_in (struct page *page, void *kva) {
 	// printf("check swap_in kva %s\n", kva);
 	// printf("check swap_in page->frame->page->va %p\n", page->frame->page->va);
 	// printf("check swap_in page-->va %p\n", page->va);
-
 	// vm_claim_page(page->va);
 	anon_page->bit_idx = bitmap_size(swap_table) + 1;
 	return true;
