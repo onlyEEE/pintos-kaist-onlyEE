@@ -209,6 +209,7 @@ void check_valid_buffer (void *buffer, size_t size, bool to_write, void* rsp){
 			if(rsp > buffer && page->is_writable == false) exit(-1);
 		}
 		size -= PGSIZE;
+		buffer += PGSIZE;
 		// size -= 1;
 	}
 }

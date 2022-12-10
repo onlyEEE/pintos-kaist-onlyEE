@@ -146,13 +146,13 @@ struct thread {
 	void * stack_bottom;
 	void * user_rsp;
 	void * open_addr;
-	int open_file_cnt;
+	// int open_file_cnt;
 	// unsigned int swap_cnt;
 	// struct bitmap *swap_table;
 #endif
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
-	unsigned magic;                     /* Detects stack overflow. */
+	unsigned magic;           /* Detects stack overflow. */
 };
 
 /* If false (default), use round-robin scheduler.
