@@ -53,7 +53,6 @@ struct page {
 	bool not_present;
 	bool is_writable;
 	bool is_shared;
-	size_t bit_idx;
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {
@@ -70,8 +69,8 @@ struct page {
 struct frame {
 	void *kva;
 	struct page *page;
-	struct list_elem list_e;
 	struct thread *thread;
+	struct list_elem list_e;
 };
 
 /* The function table for page operations.

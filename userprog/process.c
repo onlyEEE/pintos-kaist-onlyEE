@@ -539,8 +539,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	argument_stack(argument_list, argument_count, if_);
 	success = true;
-	printf("checkout load success %d\n", success);
-	goto done;
+
 done:
 	/* We arrive here whether the load is successful or not. */
 	//file_close (file);
@@ -739,7 +738,6 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: VA is available when calling this function. */
 	struct file_info *file_info = (struct file_info *)aux;
 	int temp;
-	printf("check lazy_load_segment\n");
 	// vm_claim_page(page->va);
 	file_seek(file_info->file, file_info->ofs);
 	// printf("file_info %p\n", file_info);
@@ -758,6 +756,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	// printf("temp %d\n", temp);
 	// printf("pml4 page%p\n", pml4_get_page(thread_current()->pml4, page->va));
 	memset(page->frame->kva + file_info->read_bytes, 0, file_info->zero_bytes);
+
 	return true;
 }
 
