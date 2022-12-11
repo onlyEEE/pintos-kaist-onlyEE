@@ -79,9 +79,10 @@ anon_swap_out (struct page *page) {
 	// printf("check swap_out page->va %p\n", page->va);
 	// printf("check page->bitmap_idx %d\n", anon_page->bit_idx);
 	// hex_dump(page->frame->kva, page->frame->kva, PGSIZE, true);
+	if (anon_page->bit_idx <= bitmap_size(swap_table)) return false;
+	
 	size_t bitmap_idx = bitmap_scan(swap_table, 0, 1, 0);
 	if (bitmap_idx == BITMAP_ERROR) return false;
-	if (anon_page->bit_idx <= bitmap_size(swap_table)) return false;
 	//이부분 효율성 추구헤보기.
 	disk_sector_t sector_idx = bitmap_idx * 8;
 	for(int i = 0; i < 8; i++)

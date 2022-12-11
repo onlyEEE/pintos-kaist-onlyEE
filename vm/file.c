@@ -54,13 +54,12 @@ file_backed_swap_out (struct page *page) {
 	struct thread *page_holder = page->frame->thread;
 	bool is_dirty = pml4_is_dirty(page_holder->pml4, page->va);
 	struct file_info *file_info = page->file.aux;
-	if (is_dirty){
+	if (is_dirty && page->is_writable){
 		// printf("%s\n", page->frame->kva);
 		// int checker = file_write(file_info->file, curr->open_addr, file_info->read_bytes);
-		if (page->is_writable){
-			pml4_set_dirty(page_holder->pml4, page->va, 0);
-			file_write_at(file_info->file, page->va, file_info->read_bytes, file_info->ofs);
-		}
+		pml4_set_dirty(page_holder->pml4, page->va, 0);
+		file_write_at(file_info->file, page->va, file_info->read_bytes, file_info->ofs);
+
 		// memcpy(addr, page->frame->kva, file_info->read_bytes);
 		// palloc_free_page(page->frame->kva);
 	}
