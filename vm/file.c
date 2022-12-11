@@ -73,6 +73,7 @@ file_backed_swap_out (struct page *page) {
 static void
 file_backed_destroy (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
+	struct frame *frame = page->frame;
 	if (page){
 		if (file_page) {
 			if (file_page->aux){
@@ -80,9 +81,14 @@ file_backed_destroy (struct page *page) {
 				file_page->aux = NULL;
 			}
 		}
-		if (page->frame) {
-			free(page->frame);
-			page->frame = NULL;
+		list_remove(&page->copy_elem);
+		if(frame){
+			if(list_empty(&frame->page_list)){
+				page->frame = NULL;
+				free(frame);
+			} else if(frame->page == page){
+				frame->page = list_entry(list_begin(&frame->page_list), struct page, copy_elem);
+			}
 		}
 	}
 }
