@@ -12,6 +12,9 @@ static void page_destroy(const struct hash_elem *p_, void *aux UNUSED);
 struct list frame_table;
 struct list_elem *start;
 struct lock lock_vm;
+struct lock lock_copy;
+struct lock lock_kill;
+
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -28,6 +31,8 @@ vm_init (void) {
 	/* TODO: Your code goes here. */
 	start = NULL;
 	lock_init(&lock_vm);
+	lock_init(&lock_copy);
+	lock_init(&lock_kill);
 	list_init(&frame_table);
 }
 
@@ -175,6 +180,7 @@ vm_evict_frame (void) {
 	lock_release(&lock_vm);
 	// /* TODO: swap out the victim and return the evicted frame. */
 	if (victim){
+		list_init(&victim->page_list);
 		return victim;
 	}
 	return NULL;
@@ -184,26 +190,6 @@ vm_evict_frame (void) {
  * and return it. This always return valid address. That is, if the user pool
  * memory is full, this function evicts the frame to get the available memory
  * space.*/
-// static struct frame *
-// vm_get_frame (void) {
-// 	struct frame *frame = NULL;
-// 	/* TODO: Fill this function. */
-// 	frame = (struct frame *)malloc(sizeof frame);
-// 	frame->kva = palloc_get_page(PAL_USER);
-// 	// printf("[Debug] frame->kva %p\n", frame->kva);
-// 	frame->page = NULL;
-// 	/*
-// 	TODO : if user pool memory is full, do evict.
-// 	*/
-// 	if(!is_kernel_vaddr(frame->kva)){
-// 		// free(frame);
-// 		// return NULL;
-// 		PANIC("todo");
-// 	}
-// 	ASSERT (frame != NULL);
-// 	ASSERT (frame->page == NULL);
-// 	return frame;
-// }
 
 static struct frame *
 vm_get_frame(void)
@@ -223,6 +209,7 @@ vm_get_frame(void)
 	else{
 		frame = (struct frame *)malloc(sizeof(struct frame));
 		frame->kva = new_kva;
+		list_init(&frame->page_list);
 	}
 	list_push_back(&frame_table, &frame->list_e);
 	frame->page = NULL;
@@ -251,6 +238,13 @@ vm_stack_growth (void *addr UNUSED) {
 /* Handle the fault on write_protected page */
 static bool
 vm_handle_wp (struct page *page UNUSED) {
+	struct frame *old_frame = page->frame;
+	if (vm_do_claim_page(page)){
+		memcpy(page->frame->kva, old_frame->kva, PGSIZE);
+		return true;
+	} else {
+		return false;
+	}
 }
 
 /* Return true on success */
@@ -260,7 +254,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	// void* stack_bottom = &thread_current()->stack_bottom;
 	void *stack_bottom = (void *) (((uint8_t *) thread_current()->stack_bottom));
-	void *rsp = user ? f->rsp : thread_current()->user_rsp; 
+	void *rsp = user ? f->rsp : thread_current()->user_rsp;
 	// printf("stackbottom start %p\n", stack_bottom);
 	struct page *page = NULL;
 	if (is_kernel_vaddr(addr)){
@@ -284,6 +278,8 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	if (page != NULL && page->frame == NULL){	
 		return vm_do_claim_page (page);
 	// printf("[Debug]page->frame->kva : %p\n", page->frame->kva);
+	}else if(page->frame != NULL && list_size(&page->frame->page_list) > 1){
+		return vm_handle_wp(page);
 	}
 	else{
 		// printf("[Debug]check fault false\n");
@@ -333,6 +329,7 @@ static bool
 
 	/* Set links */
 	frame->page = page;
+	list_push_back(&frame->page_list, &page->copy_elem);
 	page->frame = frame;
 	// page->not_present = false;
 	// printf("page %p\n", page->va);
@@ -369,18 +366,24 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 	while (hash_next(&i)){
 		struct page *src_page = hash_entry (hash_cur(&i), struct page, hash_elem);
 		struct page *dst_page = (struct page *)malloc(sizeof(struct page));
+		lock_acquire(&lock_copy);
 		memcpy(dst_page, src_page, sizeof(struct page));
+		lock_release(&lock_copy);
 		if (src_page->frame){
-			if (vm_do_claim_page(dst_page))
-			{
-				memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
-				if(src_page->file.type == VM_FILE) {
-					struct file_info * file_info = (struct file_info *)malloc(sizeof(struct file_info));
-					memcpy(file_info, (struct file_info *)src_page->uninit.aux, sizeof(file_info));
-					file_info->file = file_reopen(file_info->file);
-					thread_current()->open_addr = dst_page->va;
-					dst_page->uninit.aux = file_info;
-				}
+			list_push_back(&src_page->frame->page_list, &dst_page->copy_elem);
+			// if (vm_do_claim_page(dst_page))
+				// lock_acquire(&lock_copy);
+				// memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
+				// lock_release(&lock_copy);
+			src_page->frame->write_protected = true;
+			if(src_page->file.type == VM_FILE) {
+				struct file_info * file_info = (struct file_info *)malloc(sizeof(struct file_info));
+				lock_acquire(&lock_copy);
+				memcpy(file_info, (struct file_info *)src_page->uninit.aux, sizeof(file_info));
+				lock_release(&lock_copy);
+				file_info->file = file_reopen(file_info->file);
+				thread_current()->open_addr = dst_page->va;
+				dst_page->uninit.aux = file_info;
 			}
 		}
 		success &= spt_insert_page(dst, dst_page);
@@ -394,6 +397,7 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
 	struct hash_iterator i;
+	lock_acquire(&lock_kill);
 	while (!hash_empty(&spt->spt_hash)){
 		hash_first (&i, &spt->spt_hash);
 		hash_next(&i);
@@ -402,6 +406,9 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 		if (target->uninit.type == VM_FILE) munmap(target->va);
 		else spt_remove_page(spt, target);
 	}
+	lock_release(&lock_kill);
+	// for (int i = 0; i < 1000; i++);
+	// printf("check current thread_name %s-%d\n", thread_name(), thread_tid());
 	// hash_destroy(&spt->spt_hash, page_destroy);
 	// if(!hash_empty(&spt->spt_hash)) hash_destroy(&spt->spt_hash, page_hash);
 }

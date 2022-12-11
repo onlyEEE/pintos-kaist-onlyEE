@@ -27,11 +27,12 @@ static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 void argument_stack(char ** parse, int count, struct intr_frame* if_);
-
+static struct lock lock_p;
 /* General process initializer for initd and other process. */
 static void
 process_init (void) {
 	struct thread *current = thread_current ();
+	lock_init(&lock_p);
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -82,6 +83,7 @@ tid_t process_fork(const char *name, struct intr_frame *if_) {
 	struct thread *cur = thread_current();
 	memcpy(&cur->parent_if, if_, sizeof(struct intr_frame));
 
+
 	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, cur);
 	if (tid == TID_ERROR) {
 		return TID_ERROR;
@@ -126,7 +128,6 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
-
 	memcpy(newpage,parent_page,PGSIZE);
 	writable = is_writable(pte);
 

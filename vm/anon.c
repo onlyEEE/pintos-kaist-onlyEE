@@ -109,9 +109,14 @@ anon_destroy (struct page *page) {
 				anon_page->aux = NULL;
 			}
 		}
+		list_remove(&page->copy_elem);
 		if(frame){
-			page->frame = NULL;
-			free(frame);
+			if(list_empty(&frame->page_list)){
+				page->frame = NULL;
+				free(frame);
+			} else if(frame->page == page){
+				frame->page = list_entry(list_begin(&frame->page_list), struct page, copy_elem);
+			}
 		}
 	}
 	return ;
