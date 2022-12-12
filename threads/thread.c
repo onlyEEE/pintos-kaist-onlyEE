@@ -31,6 +31,11 @@
 #define NICE_DEFAULT 0
 #define RECENT_CPU_DEFAULT 0
 #define LOAD_AVG_DEFAULT 0
+
+#define thread_entry(THREAD_ELEM, STRUCT, MEMBER)           \
+	((STRUCT *) ((uint8_t *) &(TREAD_ELEM)     \
+		- offsetof (STRUCT, MEMBER)))
+
 int load_avg;
 
 /* List of processes in THREAD_READY state, that is, processes

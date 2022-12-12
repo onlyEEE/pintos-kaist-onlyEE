@@ -52,7 +52,7 @@ struct page {
 	struct hash_elem hash_elem; /* Hash table elem */
 	bool not_present;
 	bool is_writable;
-	bool is_shared;
+	struct list_elem copy_elem;
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {
@@ -69,9 +69,10 @@ struct page {
 struct frame {
 	void *kva;
 	struct page *page;
-
 	struct thread *thread;
+	struct list page_list;
 	struct list_elem list_e;
+	int write_protected;
 };
 
 /* The function table for page operations.

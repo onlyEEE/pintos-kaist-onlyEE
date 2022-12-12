@@ -73,6 +73,7 @@ file_backed_swap_out (struct page *page) {
 static void
 file_backed_destroy (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
+	struct frame *frame = page->frame;
 	if (page){
 		if (file_page) {
 			if (file_page->aux){
@@ -80,9 +81,15 @@ file_backed_destroy (struct page *page) {
 				file_page->aux = NULL;
 			}
 		}
-		if (page->frame) {
-			free(page->frame);
-			page->frame = NULL;
+		if(frame){
+			list_remove(&page->copy_elem);
+			frame->write_protected--;
+			if(frame->write_protected == 0){
+				page->frame = NULL;
+				free(frame);
+			} else if(frame->page == page){
+				frame->page = list_entry(list_begin(&frame->page_list), struct page, copy_elem);
+			}
 		}
 	}
 }
@@ -142,7 +149,7 @@ do_munmap (void *addr) {
 			pml4_set_dirty(curr->pml4, addr, 0);
 		}
 		// memcpy(addr, page->frame->kva, file_info->read_bytes);
-		// palloc_free_page(page->frame->kva);
+		palloc_free_page(page->frame->kva);
 	}
 	spt_remove_page(&curr->spt, page);
 }

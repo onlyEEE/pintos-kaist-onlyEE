@@ -32,7 +32,7 @@ typedef int tid_t;
 
 /* System Call */
 #define FDT_PAGES 3 //To Do : 추후 수정 시도
-#define FDCOUNT_LIMIT FDT_PAGES *(1<<9) // limit fdidx
+#define FDCOUNT_LIMIT FDT_PAGES * (1<<8) // limit fdidx
 
 /* System Call */
 #define STDIN 1

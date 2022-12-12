@@ -27,11 +27,12 @@ static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 void argument_stack(char ** parse, int count, struct intr_frame* if_);
-
+static struct lock lock_p;
 /* General process initializer for initd and other process. */
 static void
 process_init (void) {
 	struct thread *current = thread_current ();
+	lock_init(&lock_p);
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -66,7 +67,7 @@ initd (void *f_name) {
 	supplemental_page_table_init (&thread_current ()->spt);
 #endif
 
-	// process_init ();
+	process_init ();
 
 	if (process_exec (f_name) < 0)
 		PANIC("Fail to launch initd\n");
@@ -81,6 +82,7 @@ tid_t process_fork(const char *name, struct intr_frame *if_) {
 	// 현재 프로세스를 새 프로세스로 복제
 	struct thread *cur = thread_current();
 	memcpy(&cur->parent_if, if_, sizeof(struct intr_frame));
+
 
 	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, cur);
 	if (tid == TID_ERROR) {
@@ -126,7 +128,6 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
-
 	memcpy(newpage,parent_page,PGSIZE);
 	writable = is_writable(pte);
 
@@ -736,6 +737,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+	if(list_size(&page->frame->page_list) > 1) return true;
 	struct file_info *file_info = (struct file_info *)aux;
 	int temp;
 	// vm_claim_page(page->va);
@@ -747,11 +749,13 @@ lazy_load_segment (struct page *page, void *aux) {
 	// printf("page->frame->kva %p\n", page->frame->kva);
 	// printf("file_length %d\n", file_length(file_info->file));
 	// hex_dump(page->frame->kva, page->frame->kva, PGSIZE, true);
+	lock_acquire(&lock_p);
 	if (temp = file_read(file_info->file, page->frame->kva, file_info->read_bytes) != file_info->read_bytes)
 	{
 		palloc_free_page(page->frame->kva);
 		return false;
 	}
+	lock_release(&lock_p);
 	// printf("file_info->read_bytes=%d\nfile_info->zero_bytes=%d\n", file_info->read_bytes, file_info->zero_bytes);
 	// printf("temp %d\n", temp);
 	// printf("pml4 page%p\n", pml4_get_page(thread_current()->pml4, page->va));

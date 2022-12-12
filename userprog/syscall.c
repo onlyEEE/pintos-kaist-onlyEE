@@ -36,7 +36,7 @@ unsigned tell (int fd);
 int add_file(struct file *file);
 int dup2(int oldfd, int newfd);
 void remove_file(int fd);
-void check_valid_buffer (void *buffer, size_t size, bool to_write, void* rsp);
+void check_valid_buffer (void *buffer, size_t size, bool to_write, struct intr_frame *f);
 void *mmap (void *addr, size_t length, int writable, int fd, off_t offset);
 void munmap(void * addr);
 /* System call.
@@ -53,7 +53,9 @@ void munmap(void * addr);
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
 
 static struct lock lock;
-
+static struct lock lock_open;
+static struct lock lock_read;
+static struct lock lock_write;
 	/*register uint64_t *num asm ("rax") = (uint64_t *) num_;
 	register uint64_t *a1 asm ("rdi") = (uint64_t *) a1_;
 	register uint64_t *a2 asm ("rsi") = (uint64_t *) a2_;
@@ -65,6 +67,9 @@ static struct lock lock;
 void
 syscall_init (void) {
 	lock_init(&lock);
+	lock_init(&lock_open);
+	lock_init(&lock_read);
+	lock_init(&lock_write);
 	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
 			((uint64_t)SEL_KCSEG) << 32);
 	write_msr(MSR_LSTAR, (uint64_t) syscall_entry);
@@ -105,11 +110,11 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		f->R.rax = filesize(f->R.rdi);
 		break;
 	case SYS_READ:
-		check_valid_buffer(f->R.rsi, f->R.rdx, 0, f->rsp);
+		check_valid_buffer(f->R.rsi, f->R.rdx, 0, f);
 		f->R.rax = read(f->R.rdi,f->R.rsi,f->R.rdx);
 		break;
 	case SYS_WRITE:
-		check_valid_buffer(f->R.rsi, f->R.rdx, 1, f->rsp);
+		check_valid_buffer(f->R.rsi, f->R.rdx, 1, f);
 		f->R.rax = write(f->R.rdi,f->R.rsi,f->R.rdx);
 		break;
 	case SYS_FORK:
@@ -187,7 +192,9 @@ void *check_address(void* addr){
 	return page;
 }
 
-void check_valid_buffer (void *buffer, size_t size, bool to_write, void* rsp){
+void check_valid_buffer (void *buffer, size_t size, bool to_write, struct intr_frame *f){
+	void *rsp = f->rsp;
+	// msg("checkin check valid buffer %d", to_write);
 	while ((int)size > 0){
 		struct page* page = (struct page*)check_address(buffer);
 		// printf("size %d\n", size);
@@ -206,12 +213,16 @@ void check_valid_buffer (void *buffer, size_t size, bool to_write, void* rsp){
 			}
 		}
 		else {
+			//문제 mmap-ro.
+			// printf("here? %p\n", buffer);
 			if(rsp > buffer && page->is_writable == false) exit(-1);
+			if (buffer < 0x100000 && page->is_writable == false) exit(-1); // base_memory 접근시.
 		}
 		size -= PGSIZE;
 		buffer += PGSIZE;
 		// size -= 1;
 	}
+	// msg("checkout check valid buffer %d", to_write);
 }
 
 /* Project2-3 System Call */
@@ -224,6 +235,7 @@ void exit (int status){
 	/* status가 1로 넘어온 경우는 정상 종료 */
 	struct thread* curr = thread_current();
 	curr->exit_status = status;
+	// msg("%s: exit(%d)\n",curr->name, status);
 	printf("%s: exit(%d)\n",curr->name, status);
 	thread_exit();
 }
@@ -307,7 +319,10 @@ int filesize (int fd){
 int read (int fd, void *buffer, unsigned size){
 	off_t char_count = 0;
 	struct thread *cur = thread_current();
+	// lock_acquire(&lock_read);
+	
 	struct file *file = find_file(fd);
+	// lock_release(&lock_read);
 	if (fd == NULL){
 		return -1;
 	}
@@ -325,11 +340,13 @@ int read (int fd, void *buffer, unsigned size){
 	}
 
 	/* Keyboard 입력 처리 */
+
 	if(file == STDIN){
 		if (cur->stdin_count == 0){
 			// 더이상 열려있는 stdin fd가 없다.
 			NOT_REACHED();
 			remove_file(fd);
+			// lock_release(&lock_read);
 			return -1;
 		}
 		while (char_count < size)
@@ -345,9 +362,11 @@ int read (int fd, void *buffer, unsigned size){
 		
 	}
 	else{
-		lock_acquire(&lock);
+		lock_acquire(&lock_read);
 		char_count = file_read(file,buffer,size);
-		lock_release(&lock);
+		// printf("check buffer %s\n",buffer);
+		// printf("check char_count %d\n", char_count);
+		lock_release(&lock_read);
 	}
 	return char_count;
 }
@@ -356,7 +375,9 @@ int read (int fd, void *buffer, unsigned size){
 int write (int fd, const void *buffer, unsigned size) {
 	off_t write_size = 0;
 	struct thread *cur = thread_current();
+	lock_acquire(&lock_write);
 	struct file *file = find_file(fd);
+	lock_release(&lock_write);
 	if (fd == NULL){
 		return -1;
 	}
@@ -374,9 +395,9 @@ int write (int fd, const void *buffer, unsigned size) {
 		putbuf(buffer, size);
 		return size;
   	}else{
-		lock_acquire(&lock);
+		lock_acquire(&lock_write);
 		write_size = file_write(file,buffer,size);
-		lock_release(&lock);
+		lock_release(&lock_write);
 	} 
 	return write_size;
 }
@@ -414,8 +435,9 @@ void close (int fd){
 		curr->stdin_count--;
 	else if(fd==1 || close_file==STDOUT)
 		curr->stdout_count--;
-
+	// lock_acquire(&lock_open);
 	remove_file(fd);
+	// lock_release(&lock_open);
 
 
 	if(fd < 2 || close_file <= 2){
@@ -423,7 +445,9 @@ void close (int fd){
 	}
 
 	if(close_file->dup_count == 0){
+		// lock_acquire(&lock_open);
 		file_close(close_file);
+		// lock_release(&lock_ope/n);
 	}
 	else{
 		close_file->dup_count--;
@@ -466,15 +490,17 @@ mmap (void *addr, size_t length, int writable, int fd, off_t offset){
 	if (offset % PGSIZE != 0 || pg_round_down(addr) != addr) return NULL;
 
 	enum intr_level old_level;
-	old_level = intr_disable();
+	// old_level = intr_disable();
 
-	struct file *file = find_file(fd);
 	void * mapped_addr = NULL;
+	lock_acquire(&lock_open);
+	struct file *file = find_file(fd);
 	file = file_reopen(file);
 	if (file_length(file) == 0) return NULL;
 	length = file_length(file) < length ? file_length(file) : length;
+	lock_release(&lock_open);
 	mapped_addr = do_mmap(addr, length, writable, file, offset);
-	intr_set_level(old_level);
+	// intr_set_level(old_level);
 	if (mapped_addr != NULL)
 		return addr;
 	else return NULL;
