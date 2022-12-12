@@ -4,6 +4,8 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "threads/mmu.h"
+#include "userprog/process.h"
+#include "userprog/syscall.h"
 // #include "lib/kernel/list.h"
 
 static void page_destroy(const struct hash_elem *p_, void *aux UNUSED);
@@ -12,8 +14,6 @@ static void page_destroy(const struct hash_elem *p_, void *aux UNUSED);
 struct list frame_table;
 struct list_elem *start;
 struct lock lock_vm;
-struct lock lock_copy;
-struct lock lock_kill;
 
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
@@ -31,8 +31,6 @@ vm_init (void) {
 	/* TODO: Your code goes here. */
 	start = NULL;
 	lock_init(&lock_vm);
-	lock_init(&lock_copy);
-	lock_init(&lock_kill);
 	list_init(&frame_table);
 }
 
@@ -240,25 +238,19 @@ static bool
 vm_handle_wp (struct page *page UNUSED) {
 	struct frame *old_frame = page->frame;
 	struct thread *cur = thread_current();
-	// page->is_writable = true;
-	// printf("check %p\n", old_frame->kva);
+
 	page->frame = NULL;
 	list_remove(&page->copy_elem);
 	pml4_clear_page(cur->pml4, page->va);
-	// page->is_writable = true;
-	// printf("check write_protected %d\n", old_frame->write_protected);
+
 	old_frame->write_protected--;
-	if(old_frame->write_protected == 1 && old_frame->page != page){
-		old_frame->page->is_writable = true;
-	} else if(old_frame->page == page){
-		// printf("check frame->page %p\n", old_frame->page);
+	if(old_frame->page == page){
 		old_frame->page = list_entry(list_begin(&old_frame->page_list), struct page, copy_elem);
-		// printf("check frame->page %p\n", old_frame->page);
 	}
 	if (vm_do_claim_page(page)){
-		lock_acquire(&lock_copy);
+		// lock_acquire(&lock_copy);
 		memcpy(page->frame->kva, old_frame->kva, PGSIZE);
-		lock_release(&lock_copy);
+		// lock_release(&lock_copy);
 		return true;
 	} else {
 		// printf("check do_claim_fail\n");
@@ -392,24 +384,24 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct page *dst_page = (struct page *)malloc(sizeof(struct page));
 		
 		
-		lock_acquire(&lock_copy);
+		// lock_acquire(&lock_copy);
 		memcpy(dst_page, src_page, sizeof(struct page));
-		lock_release(&lock_copy);
+		// lock_release(&lock_copy);
 		if (src_page->frame){
 			// src_page->is_writable = false;
 			// dst_page->is_writable = false;
-			lock_acquire(&lock_copy);
+			// lock_acquire(&lock_copy);
 			list_push_back(&src_page->frame->page_list, &dst_page->copy_elem);
-			lock_release(&lock_copy);
+			// lock_release(&lock_copy);
 
 			pml4_set_page(thread_current()->pml4, dst_page->va, dst_page->frame->kva, 0);
 			src_page->frame->write_protected++;
-			if(src_page->file.type == VM_FILE) {
+			if(src_page->uninit.aux != NULL) {
 				struct file_info * file_info = (struct file_info *)malloc(sizeof(struct file_info));
-				lock_acquire(&lock_copy);
-				memcpy(file_info, (struct file_info *)src_page->uninit.aux, sizeof(file_info));
+				lock_acquire(&lock_read);
+				memcpy(file_info, src_page->uninit.aux, sizeof(struct file_info));
 				file_info->file = file_reopen(file_info->file);
-				lock_release(&lock_copy);
+				lock_release(&lock_read);
 				thread_current()->open_addr = dst_page->va;
 				dst_page->uninit.aux = file_info;
 			}
@@ -441,8 +433,6 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 		}
 		spt_remove_page(spt, target);
 	}
-	// lock_release(&lock_kill);
-	// for (int i = 0; i < 1000; i++);
 }
 
 unsigned

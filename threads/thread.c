@@ -769,7 +769,8 @@ void donate_priority(void){
     struct thread *target = thread_current();//현재 스레드는 Lock-Holder에 비해 우선 순위가 높은 스레드
     int nested_dp = 0;
     while (target->wait_on_lock && nested_dp < MAX_NESTED_DEPTH){
-        target = target->wait_on_lock->holder;
+		if(target->wait_on_lock->holder > 0x100)
+			target = target->wait_on_lock->holder;
         if (target->priority < thread_current()->priority){
             target->priority = thread_current()->priority;//여기가 우선순위 기부
         }

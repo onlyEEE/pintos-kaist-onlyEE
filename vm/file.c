@@ -7,7 +7,6 @@
 static bool file_backed_swap_in (struct page *page, void *kva);
 static bool file_backed_swap_out (struct page *page);
 static void file_backed_destroy (struct page *page);
-struct lock lock;
 /* DO NOT MODIFY this struct */
 static const struct page_operations file_ops = {
 	.swap_in = file_backed_swap_in,
@@ -19,7 +18,7 @@ static const struct page_operations file_ops = {
 /* The initializer of file vm */
 void
 vm_file_init (void) {
-	lock_init(&lock);
+	
 }
 
 /* Initialize the file backed page */
@@ -75,18 +74,20 @@ file_backed_destroy (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
 	struct frame *frame = page->frame;
 	if (page){
-		if (file_page) {
-			if (file_page->aux){
-				free(file_page->aux);
-				file_page->aux = NULL;
-			}
-		}
 		if(frame){
 			list_remove(&page->copy_elem);
 			frame->write_protected--;
 			if(frame->write_protected == 0){
 				page->frame = NULL;
+				// palloc_free_page(frame->kva);
 				free(frame);
+				if(file_page) {
+					if (file_page->aux){
+						struct file_info *file_info = (struct file_info *) file_page->aux;
+						free(file_info);
+						file_page->aux = NULL;
+					}
+				}
 			} else if(frame->page == page){
 				frame->page = list_entry(list_begin(&frame->page_list), struct page, copy_elem);
 			}
@@ -112,11 +113,13 @@ do_mmap (void *addr, size_t length, int writable,
 		if (spt_find_page(spt, addr) != NULL) return NULL;
 		size_t page_read_bytes = length < PGSIZE ? length : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
+		
 		struct file_info *aux_file = (struct file_info *)malloc(sizeof(struct file_info));
 		aux_file->file = file;
 		aux_file->ofs = offset;
 		aux_file->read_bytes = page_read_bytes;
 		aux_file->zero_bytes = page_zero_bytes;
+		
 		if (!vm_alloc_page_with_initializer (VM_FILE, addr,
 					writable, lazy_load_segment, aux_file))
 				return NULL;

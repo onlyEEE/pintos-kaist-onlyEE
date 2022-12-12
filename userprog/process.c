@@ -7,6 +7,7 @@
 #include <string.h>
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -84,6 +85,7 @@ tid_t process_fork(const char *name, struct intr_frame *if_) {
 	memcpy(&cur->parent_if, if_, sizeof(struct intr_frame));
 
 
+	// tid_t tid = thread_create(name, cur->priority + 1, __do_fork, cur);
 	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, cur);
 	if (tid == TID_ERROR) {
 		return TID_ERROR;
@@ -317,9 +319,9 @@ process_exit (void) {
 	{
 		close(i);
 	}
-	palloc_free_multiple(curr->fd_table,FDT_PAGES);
-	file_close(curr->running);
+	palloc_free_multiple(curr->fd_table, FDT_PAGES);
 	sema_up(&curr->wait_sema);
+	file_close(curr->running);
 	process_cleanup ();//추후 실험 필요	
 	sema_down(&curr->free_sema);
 }
@@ -454,8 +456,9 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 
 	/* Open executable file. */
-	
+	lock_acquire(&lock_read);
 	file = filesys_open (file_name);
+	lock_release(&lock_read);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", file_name);
 		exit(-1);
@@ -737,11 +740,11 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
-	if(list_size(&page->frame->page_list) > 1) return true;
+	if(page->frame->write_protected > 1) return true;
+	// if(page->uninit.aux == NULL) return false;
 	struct file_info *file_info = (struct file_info *)aux;
 	int temp;
-	// vm_claim_page(page->va);
-	file_seek(file_info->file, file_info->ofs);
+	// printf("check in lazy_load\n");
 	// printf("file_info %p\n", file_info);
 	// printf("file_info->ofs%p\n", file_info->ofs);
 	// printf("file_info->read_bytes %d\n", file_info->read_bytes);
@@ -750,14 +753,14 @@ lazy_load_segment (struct page *page, void *aux) {
 	// printf("file_length %d\n", file_length(file_info->file));
 	// hex_dump(page->frame->kva, page->frame->kva, PGSIZE, true);
 	lock_acquire(&lock_p);
+	file_seek(file_info->file, file_info->ofs);
 	if (temp = file_read(file_info->file, page->frame->kva, file_info->read_bytes) != file_info->read_bytes)
 	{
 		palloc_free_page(page->frame->kva);
 		return false;
+	
 	}
 	lock_release(&lock_p);
-	// printf("file_info->read_bytes=%d\nfile_info->zero_bytes=%d\n", file_info->read_bytes, file_info->zero_bytes);
-	// printf("temp %d\n", temp);
 	// printf("pml4 page%p\n", pml4_get_page(thread_current()->pml4, page->va));
 	memset(page->frame->kva + file_info->read_bytes, 0, file_info->zero_bytes);
 
@@ -798,6 +801,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		aux_file->ofs = ofs;
 		aux_file->read_bytes = page_read_bytes;
 		aux_file->zero_bytes = page_zero_bytes;
+		// printf("check aux_file %p\n", aux_file);
 
 		void *aux = aux_file;
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,

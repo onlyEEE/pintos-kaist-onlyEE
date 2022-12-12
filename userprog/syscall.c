@@ -54,7 +54,6 @@ void munmap(void * addr);
 
 static struct lock lock;
 static struct lock lock_open;
-static struct lock lock_read;
 static struct lock lock_write;
 	/*register uint64_t *num asm ("rax") = (uint64_t *) num_;
 	register uint64_t *a1 asm ("rdi") = (uint64_t *) a1_;
@@ -194,6 +193,7 @@ void *check_address(void* addr){
 
 void check_valid_buffer (void *buffer, size_t size, bool to_write, struct intr_frame *f){
 	void *rsp = f->rsp;
+
 	// msg("checkin check valid buffer %d", to_write);
 	while ((int)size > 0){
 		struct page* page = (struct page*)check_address(buffer);
@@ -275,18 +275,20 @@ int exec (const char *cmd_line){
 /* Project2-3 System Call */
 int open (const char *file){
 	check_address(file);
-	lock_acquire(&lock);
+	lock_acquire(&lock_read);
 	struct file *fileobj = filesys_open(file);
+	lock_release(&lock_read);
 	if (fileobj == NULL) {
 		return -1;
 	}
 
+	lock_acquire(&lock_read);
 	int fd = add_file(fileobj); // fdt : file data table
+	lock_release(&lock_read);
 	// fd table이 가득 찼다면
 	if (fd == -1) {
 		file_close(fileobj);
 	}
-	lock_release(&lock);
 	return fd;
 }
 
@@ -320,10 +322,10 @@ int filesize (int fd){
 int read (int fd, void *buffer, unsigned size){
 	off_t char_count = 0;
 	struct thread *cur = thread_current();
-	// lock_acquire(&lock_read);
 	
+	lock_acquire(&lock_read);
 	struct file *file = find_file(fd);
-	// lock_release(&lock_read);
+	lock_release(&lock_read);
 	if (fd == NULL){
 		return -1;
 	}
@@ -365,9 +367,9 @@ int read (int fd, void *buffer, unsigned size){
 	else{
 		lock_acquire(&lock_read);
 		char_count = file_read(file,buffer,size);
+		lock_release(&lock_read);
 		// printf("check buffer %s\n",buffer);
 		// printf("check char_count %d\n", char_count);
-		lock_release(&lock_read);
 	}
 	return char_count;
 }
@@ -376,9 +378,9 @@ int read (int fd, void *buffer, unsigned size){
 int write (int fd, const void *buffer, unsigned size) {
 	off_t write_size = 0;
 	struct thread *cur = thread_current();
-	lock_acquire(&lock_write);
+	lock_acquire(&lock_read);
 	struct file *file = find_file(fd);
-	lock_release(&lock_write);
+	lock_release(&lock_read);
 	if (fd == NULL){
 		return -1;
 	}
@@ -396,9 +398,9 @@ int write (int fd, const void *buffer, unsigned size) {
 		putbuf(buffer, size);
 		return size;
   	}else{
-		lock_acquire(&lock_write);
+		lock_acquire(&lock_read);
 		write_size = file_write(file,buffer,size);
-		lock_release(&lock_write);
+		lock_release(&lock_read);
 	} 
 	return write_size;
 }
@@ -436,19 +438,14 @@ void close (int fd){
 		curr->stdin_count--;
 	else if(fd==1 || close_file==STDOUT)
 		curr->stdout_count--;
-	// lock_acquire(&lock_open);
 	remove_file(fd);
-	// lock_release(&lock_open);
-
 
 	if(fd < 2 || close_file <= 2){
 		return;
 	}
 
 	if(close_file->dup_count == 0){
-		// lock_acquire(&lock_open);
 		file_close(close_file);
-		// lock_release(&lock_ope/n);
 	}
 	else{
 		close_file->dup_count--;
@@ -494,12 +491,12 @@ mmap (void *addr, size_t length, int writable, int fd, off_t offset){
 	// old_level = intr_disable();
 
 	void * mapped_addr = NULL;
-	lock_acquire(&lock_open);
 	struct file *file = find_file(fd);
+	lock_acquire(&lock_read);
 	file = file_reopen(file);
+	lock_release(&lock_read);
 	if (file_length(file) == 0) return NULL;
 	length = file_length(file) < length ? file_length(file) : length;
-	lock_release(&lock_open);
 	mapped_addr = do_mmap(addr, length, writable, file, offset);
 	// intr_set_level(old_level);
 	if (mapped_addr != NULL)
