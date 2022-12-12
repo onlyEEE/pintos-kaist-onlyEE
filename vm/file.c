@@ -81,9 +81,10 @@ file_backed_destroy (struct page *page) {
 				file_page->aux = NULL;
 			}
 		}
-		list_remove(&page->copy_elem);
 		if(frame){
-			if(list_empty(&frame->page_list)){
+			list_remove(&page->copy_elem);
+			frame->write_protected--;
+			if(frame->write_protected == 0){
 				page->frame = NULL;
 				free(frame);
 			} else if(frame->page == page){
@@ -148,7 +149,7 @@ do_munmap (void *addr) {
 			pml4_set_dirty(curr->pml4, addr, 0);
 		}
 		// memcpy(addr, page->frame->kva, file_info->read_bytes);
-		// palloc_free_page(page->frame->kva);
+		palloc_free_page(page->frame->kva);
 	}
 	spt_remove_page(&curr->spt, page);
 }

@@ -55,6 +55,7 @@ anon_swap_in (struct page *page, void *kva) {
 
 	// printf("check swap_in page->bit_idx %d\n", anon_page->bit_idx);
 	// printf("check swap_in page->va %p\n", page->va);
+	// printf("check bit_size %d\n", bitmap_size(swap_table));
 	// printf("check swapin bitmap_test %d\n", bitmap_test(swap_table, anon_page->bit_idx));
 	if (anon_page->bit_idx > bitmap_size(swap_table)) return true;
 	if (bitmap_test(swap_table, anon_page->bit_idx) == false) return false;
@@ -109,13 +110,17 @@ anon_destroy (struct page *page) {
 				anon_page->aux = NULL;
 			}
 		}
-		list_remove(&page->copy_elem);
 		if(frame){
-			if(list_empty(&frame->page_list)){
+			list_remove(&page->copy_elem);
+			frame->write_protected--;
+			if(frame->write_protected == 0){
 				page->frame = NULL;
+				palloc_free_page(frame->kva);
 				free(frame);
 			} else if(frame->page == page){
+				// printf("check frame->page %p\n", frame->page);
 				frame->page = list_entry(list_begin(&frame->page_list), struct page, copy_elem);
+				// printf("check frame->page %p\n", frame->page);
 			}
 		}
 	}
