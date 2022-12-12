@@ -13,11 +13,11 @@
 #include "threads/synch.h"
 #include "lib/string.h"
 #include "threads/palloc.h"
-
+#include "vm/file.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
-void check_address(void* addr);
+void *check_address(void* addr);
 void halt(void);
 void exit(int status);
 bool create(const char *file, unsigned initial_size);
@@ -36,9 +36,9 @@ unsigned tell (int fd);
 int add_file(struct file *file);
 int dup2(int oldfd, int newfd);
 void remove_file(int fd);
-
-
-
+void check_valid_buffer (void *buffer, size_t size, bool to_write, void* rsp);
+void *mmap (void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap(void * addr);
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -54,6 +54,13 @@ void remove_file(int fd);
 
 static struct lock lock;
 
+	/*register uint64_t *num asm ("rax") = (uint64_t *) num_;
+	register uint64_t *a1 asm ("rdi") = (uint64_t *) a1_;
+	register uint64_t *a2 asm ("rsi") = (uint64_t *) a2_;
+	register uint64_t *a3 asm ("rdx") = (uint64_t *) a3_;
+	register uint64_t *a4 asm ("r10") = (uint64_t *) a4_;
+	register uint64_t *a5 asm ("r8") = (uint64_t *) a5_;
+	register uint64_t *a6 asm ("r9") = (uint64_t *) a6_;*/
 
 void
 syscall_init (void) {
@@ -98,9 +105,11 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		f->R.rax = filesize(f->R.rdi);
 		break;
 	case SYS_READ:
+		check_valid_buffer(f->R.rsi, f->R.rdx, 0, f->rsp);
 		f->R.rax = read(f->R.rdi,f->R.rsi,f->R.rdx);
 		break;
 	case SYS_WRITE:
+		check_valid_buffer(f->R.rsi, f->R.rdx, 1, f->rsp);
 		f->R.rax = write(f->R.rdi,f->R.rsi,f->R.rdx);
 		break;
 	case SYS_FORK:
@@ -120,6 +129,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	case SYS_DUP2:	// project2 - extra
 		f->R.rax = dup2(f->R.rdi, f->R.rsi);
+		break;
+	case SYS_MMAP:
+		f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+		break;
+	case SYS_MUNMAP:
+		munmap(f->R.rdi);
 		break;
 	default:
 		thread_exit();
@@ -156,10 +171,46 @@ int dup2(int oldfd, int newfd) {
 }
 
 /* Project2-2 User Memory Access */
-void check_address(void* addr){
+void *check_address(void* addr){
 	struct thread* curr = thread_current();
-	if(!is_user_vaddr(addr) || addr == NULL || pml4_get_page(curr->pml4,addr) == NULL){
-		exit(-1);
+	void *page = NULL;
+	if(!is_user_vaddr(addr) || addr == NULL) exit(-1);
+	#ifdef VM
+		page = (void *)spt_find_page(&curr->spt.spt_hash, addr);
+		if (page == NULL)
+			exit(-1);		
+	#else
+		page = pml4_get_page(curr->pml4, addr);
+		if (page == NULL)
+			exit(-1);
+	#endif
+	return page;
+}
+
+void check_valid_buffer (void *buffer, size_t size, bool to_write, void* rsp){
+	while ((int)size > 0){
+		struct page* page = (struct page*)check_address(buffer);
+		// printf("size %d\n", size);
+		// printf("find buffer %p\n", buffer);
+		// // printf("check rsp %p\n", rsp);
+		// printf("is user_pte? %p\n", rsp);
+		// printf("find page->va %p\n", page->frame->kva);
+		// printf("find page->va %p\n", stack_page->frame->kva);
+		// printf("check (uint64_t) page->va * 1 << 10 %p\n",(uint64_t) page->va * 1 << 12);
+		if(page == NULL) exit(-1);
+		if(to_write == true)
+		{
+			if(page->file.type == VM_FILE){
+				struct file_info *file_info = page->file.aux;
+				if(file_info->file->deny_write == 0) exit(-1);
+			}
+		}
+		else {
+			if(rsp > buffer && page->is_writable == false) exit(-1);
+		}
+		size -= PGSIZE;
+		buffer += PGSIZE;
+		// size -= 1;
 	}
 }
 
@@ -213,13 +264,11 @@ int open (const char *file){
 	check_address(file);
 	lock_acquire(&lock);
 	struct file *fileobj = filesys_open(file);
-
 	if (fileobj == NULL) {
 		return -1;
 	}
 
 	int fd = add_file(fileobj); // fdt : file data table
-
 	// fd table이 가득 찼다면
 	if (fd == -1) {
 		file_close(fileobj);
@@ -256,15 +305,21 @@ int filesize (int fd){
 
 /* Project2-3 System Call */
 int read (int fd, void *buffer, unsigned size){
-	check_address(buffer);
 	off_t char_count = 0;
 	struct thread *cur = thread_current();
 	struct file *file = find_file(fd);
-
 	if (fd == NULL){
 		return -1;
 	}
+	struct page *page = spt_find_page(&cur->spt, buffer);
+	// printf("check buffer %p\n", page->frame);
 
+	// if (page->frame) 
+	// {
+	// // 	if (buffer + size < USER_STACK - 0x100000)
+	// 		exit(-1);
+	// }
+	
 	if (file == NULL || file == STDOUT){
 		return -1;
 	}
@@ -299,11 +354,9 @@ int read (int fd, void *buffer, unsigned size){
 
 /* Project2-3 System Call */
 int write (int fd, const void *buffer, unsigned size) {
-	check_address(buffer);
 	off_t write_size = 0;
 	struct thread *cur = thread_current();
 	struct file *file = find_file(fd);
-
 	if (fd == NULL){
 		return -1;
 	}
@@ -404,4 +457,29 @@ unsigned tell (int fd){
 		return;
 	}
 	return file_tell(file);
+}
+
+void *
+mmap (void *addr, size_t length, int writable, int fd, off_t offset){
+	if (addr <= 0 || (int) length <= 0) return NULL;
+	if (addr + length > KERN_BASE || addr > KERN_BASE) return NULL;
+	if (offset % PGSIZE != 0 || pg_round_down(addr) != addr) return NULL;
+
+	enum intr_level old_level;
+	old_level = intr_disable();
+
+	struct file *file = find_file(fd);
+	void * mapped_addr = NULL;
+	file = file_reopen(file);
+	if (file_length(file) == 0) return NULL;
+	length = file_length(file) < length ? file_length(file) : length;
+	mapped_addr = do_mmap(addr, length, writable, file, offset);
+	intr_set_level(old_level);
+	if (mapped_addr != NULL)
+		return addr;
+	else return NULL;
+}
+
+void munmap(void * addr){
+	do_munmap(addr);
 }

@@ -233,7 +233,6 @@ thread_create (const char *name, int priority,
 	t->exit_status = 0;
 
 	list_push_back(&thread_current()->child_list, &t->child_elem);
-
 	t->fd_table = palloc_get_multiple(PAL_ZERO,FDT_PAGES);
 	if(t->fd_table == NULL){
 		return TID_ERROR;
@@ -328,7 +327,6 @@ thread_exit (void) {
 #ifdef USERPROG
 	process_exit ();
 #endif
-
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
 	intr_disable ();
@@ -559,17 +557,21 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->init_priority = priority;
 	list_init(&(t->donations));
 	t->wait_on_lock = NULL;
-	t->magic = THREAD_MAGIC;
+	t->stack_bottom = USER_STACK;
 
 	list_init(&t->child_list);
 	sema_init(&t->fork_sema,0);
 	sema_init(&t->wait_sema,0);
 	sema_init(&t->free_sema,0);
-
+	#ifdef	VM
+	t->open_addr = NULL;
+	// t->swap_cnt = 0;
+	#endif
 	/* Advanced Scheduler */
 	t->nice = NICE_DEFAULT;
 	t->recent_cpu = RECENT_CPU_DEFAULT;
 	list_push_front(&all_list,&t->all_elem);
+	t->magic = THREAD_MAGIC;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

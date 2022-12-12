@@ -8,6 +8,12 @@
         "flags.h": "c",
         "intrinsic.h": "c",
         "string.h": "c",
-        "syscall.h": "c"
+        "syscall.h": "c",
+        "process.h": "c",
+        "thread.h": "c",
+        "vm.h": "c",
+        "hash.h": "c",
+        "mmu.h": "c",
+        "palloc.h": "c"
     }
 }

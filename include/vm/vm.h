@@ -1,7 +1,10 @@
 #ifndef VM_VM_H
 #define VM_VM_H
 #include <stdbool.h>
+#include "include/lib/kernel/hash.h"
+#include "include/threads/vaddr.h"
 #include "threads/palloc.h"
+#include "threads/mmu.h"
 
 enum vm_type {
 	/* page not initialized */
@@ -35,7 +38,7 @@ struct page_operations;
 struct thread;
 
 #define VM_TYPE(type) ((type) & 7)
-
+#define STACK_LIMIT (USER_STACK - 0x100000)
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
  * uninit_page, file_page, anon_page, and page cache (project4).
@@ -46,7 +49,10 @@ struct page {
 	struct frame *frame;   /* Back reference for frame */
 
 	/* Your implementation */
-
+	struct hash_elem hash_elem; /* Hash table elem */
+	bool not_present;
+	bool is_writable;
+	bool is_shared;
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {
@@ -63,6 +69,9 @@ struct page {
 struct frame {
 	void *kva;
 	struct page *page;
+
+	struct thread *thread;
+	struct list_elem list_e;
 };
 
 /* The function table for page operations.
@@ -85,6 +94,7 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
+	struct hash spt_hash;
 };
 
 #include "threads/thread.h"
@@ -109,4 +119,6 @@ void vm_dealloc_page (struct page *page);
 bool vm_claim_page (void *va);
 enum vm_type page_get_type (struct page *page);
 
+unsigned page_hash (const struct hash_elem *p_, void *aux UNUSED);
+bool page_less (const struct hash_elem *a_,const struct hash_elem *b_, void *aux UNUSED);
 #endif  /* VM_VM_H */

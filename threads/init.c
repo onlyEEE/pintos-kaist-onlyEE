@@ -76,7 +76,6 @@ main (void) {
 	/* Break command line into arguments and parse options. */
 	argv = read_command_line ();
 	argv = parse_options (argv);
-
 	/* Initialize ourselves as a thread so we can use locks,
 	   then enable console locking. */
 	thread_init ();
@@ -208,7 +207,6 @@ parse_options (char **argv) {
 		char *save_ptr;
 		char *name = strtok_r (*argv, "=", &save_ptr);
 		char *value = strtok_r (NULL, "", &save_ptr);
-
 		if (!strcmp (name, "-h"))
 			usage ();
 		else if (!strcmp (name, "-q"))
@@ -230,7 +228,6 @@ parse_options (char **argv) {
 		else
 			PANIC ("unknown option `%s' (use -h for help)", name);
 	}
-
 	return argv;
 }
 
@@ -275,7 +272,6 @@ run_actions (char **argv) {
 #endif
 		{NULL, 0, NULL},
 	};
-
 	while (*argv != NULL) {
 		const struct action *a;
 		int i;
