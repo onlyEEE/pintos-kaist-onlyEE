@@ -72,7 +72,7 @@ struct frame {
 	struct thread *thread;
 	struct list page_list;
 	struct list_elem list_e;
-	bool write_protected;
+	int write_protected;
 };
 
 /* The function table for page operations.

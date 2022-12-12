@@ -67,7 +67,7 @@ initd (void *f_name) {
 	supplemental_page_table_init (&thread_current ()->spt);
 #endif
 
-	// process_init ();
+	process_init ();
 
 	if (process_exec (f_name) < 0)
 		PANIC("Fail to launch initd\n");
@@ -737,6 +737,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+	if(list_size(&page->frame->page_list) > 1) return true;
 	struct file_info *file_info = (struct file_info *)aux;
 	int temp;
 	// vm_claim_page(page->va);
@@ -748,11 +749,13 @@ lazy_load_segment (struct page *page, void *aux) {
 	// printf("page->frame->kva %p\n", page->frame->kva);
 	// printf("file_length %d\n", file_length(file_info->file));
 	// hex_dump(page->frame->kva, page->frame->kva, PGSIZE, true);
+	lock_acquire(&lock_p);
 	if (temp = file_read(file_info->file, page->frame->kva, file_info->read_bytes) != file_info->read_bytes)
 	{
 		palloc_free_page(page->frame->kva);
 		return false;
 	}
+	lock_release(&lock_p);
 	// printf("file_info->read_bytes=%d\nfile_info->zero_bytes=%d\n", file_info->read_bytes, file_info->zero_bytes);
 	// printf("temp %d\n", temp);
 	// printf("pml4 page%p\n", pml4_get_page(thread_current()->pml4, page->va));
