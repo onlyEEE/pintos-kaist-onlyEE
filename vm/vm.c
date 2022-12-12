@@ -245,7 +245,7 @@ vm_handle_wp (struct page *page UNUSED) {
 	page->frame = NULL;
 	list_remove(&page->copy_elem);
 	pml4_clear_page(cur->pml4, page->va);
-	page->is_writable = true;
+	// page->is_writable = true;
 	// printf("check write_protected %d\n", old_frame->write_protected);
 	old_frame->write_protected--;
 	if(old_frame->write_protected == 1 && old_frame->page != page){
@@ -396,8 +396,8 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		memcpy(dst_page, src_page, sizeof(struct page));
 		lock_release(&lock_copy);
 		if (src_page->frame){
-			src_page->is_writable = false;
-			dst_page->is_writable = false;
+			// src_page->is_writable = false;
+			// dst_page->is_writable = false;
 			lock_acquire(&lock_copy);
 			list_push_back(&src_page->frame->page_list, &dst_page->copy_elem);
 			lock_release(&lock_copy);

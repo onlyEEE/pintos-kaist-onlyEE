@@ -215,8 +215,9 @@ void check_valid_buffer (void *buffer, size_t size, bool to_write, struct intr_f
 		else {
 			//문제 mmap-ro.
 			// printf("here? %p\n", buffer);
-			if(rsp > buffer && page->is_writable == false) exit(-1);
-			if (buffer < 0x100000 && page->is_writable == false) exit(-1); // base_memory 접근시.
+			if(rsp > buffer && page->is_writable == false && page->frame->write_protected == 1) exit(-1);
+			// if (buffer < 0x100000 && page->is_writable == false) exit(-1); // base_memory 접근시.
+		
 		}
 		size -= PGSIZE;
 		buffer += PGSIZE;
