@@ -4,16 +4,16 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "threads/mmu.h"
+#include "userprog/process.h"
+#include "userprog/syscall.h"
 // #include "lib/kernel/list.h"
 
 static void page_destroy(const struct hash_elem *p_, void *aux UNUSED);
-
+static void frame_table_next(struct list *list);
 
 struct list frame_table;
 struct list_elem *start;
 struct lock lock_vm;
-struct lock lock_copy;
-struct lock lock_kill;
 
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
@@ -31,8 +31,6 @@ vm_init (void) {
 	/* TODO: Your code goes here. */
 	start = NULL;
 	lock_init(&lock_vm);
-	lock_init(&lock_copy);
-	lock_init(&lock_kill);
 	list_init(&frame_table);
 }
 
@@ -101,21 +99,15 @@ err:
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	struct page *page = (struct page *)malloc(sizeof(struct page));
-	if (page == NULL) return NULL;
-	struct page *ret = NULL;
-	struct hash_elem *e = NULL;
+	struct page *page = (struct page*)malloc(sizeof(struct page));
 	page->va = pg_round_down(va);
-	e = hash_find(&spt->spt_hash, &page->hash_elem);
-	if (e){
-		ret = hash_entry(e, struct page, hash_elem);
-	}
-	else {
-		free(page);
+	struct hash_elem *e = hash_find(&spt->spt_hash, &page->hash_elem);	
+	free(page);
+	if (e == NULL){
 		return NULL;
 	}
-	free(page);
-	return ret;
+	
+	return hash_entry(e, struct page, hash_elem);
 }
 
 /* Insert PAGE into spt with validation. */
@@ -132,8 +124,8 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	if (hash_empty(&spt->spt_hash)) return;
-	hash_delete(&spt->spt_hash, &page->hash_elem);
-	if (page) vm_dealloc_page (page);
+	if(hash_delete(&spt->spt_hash, &page->hash_elem))
+		vm_dealloc_page (page);
 	return;
 }
 
@@ -142,44 +134,36 @@ static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
 	 /* TODO: The policy for eviction is up to you. */
-	if(start == NULL)
-		start = list_begin(&frame_table);
-	while (start != list_tail(&frame_table)){
+	// if(start == NULL)
+	// 	start = list_begin(&frame_table);
+	while (1) {
+		frame_table_next(&frame_table);
 		victim = list_entry(start, struct frame, list_e);
-		struct thread *t = victim->thread;
-		if (pml4_is_accessed(t->pml4, victim->kva))
-			pml4_set_accessed(t->pml4, victim->kva, 0);
-		else{
-			start = list_remove(start);
-			return victim;
+		if (pml4_is_accessed(victim->thread->pml4, victim->page->va)){
+			pml4_set_accessed(victim->thread->pml4, victim->page->va, false);
+			continue;
 		}
-		start = list_next(start);
-	}
-	start = list_begin(&frame_table);
-	while (start != list_tail(&frame_table)){
-		victim = list_entry(start, struct frame, list_e);
-		struct thread *t = victim->thread;
-		if (pml4_is_accessed(t->pml4, victim->kva))
-			pml4_set_accessed(t->pml4, victim->kva, 0);
-		else{
-			start = list_remove(start);
-			return victim;
-		}
-		// list_next(start);
-		start = list_next(start);
+		break ;
 	}
 	return victim;
+}
+static
+void frame_table_next(struct list *list){
+	start = start->next;
+	if (list_tail(list) == start)
+		start = list_begin(list);
 }
 
 /* Evict one page and return the corresponding frame.
  * Return NULL on error.*/
 static struct frame *
 vm_evict_frame (void) {
-	lock_acquire(&lock_vm);
 	struct frame *victim UNUSED = vm_get_victim ();
-	lock_release(&lock_vm);
 	// /* TODO: swap out the victim and return the evicted frame. */
+
 	if (victim){
+		if (&victim->page_list == NULL) return NULL;
+		list_remove(&victim->list_e);
 		list_init(&victim->page_list);
 		return victim;
 	}
@@ -202,8 +186,6 @@ vm_get_frame(void)
 		frame = vm_evict_frame();
 		swap_out(frame->page);
 		frame->thread = NULL;
-		// PANIC("todo");
-		// free(frame);
 		if (frame == NULL) return NULL;
 	}
 	else{
@@ -211,6 +193,7 @@ vm_get_frame(void)
 		frame->kva = new_kva;
 		list_init(&frame->page_list);
 	}
+	start = &frame->list_e;
 	list_push_back(&frame_table, &frame->list_e);
 	frame->page = NULL;
 	frame->thread = thread_current();
@@ -233,6 +216,11 @@ vm_stack_growth (void *addr UNUSED) {
 		vm_alloc_page_with_initializer(VM_ANON, stack_bottom, 1, NULL, NULL);
 		thread_current()->stack_bottom = stack_bottom;
 	}
+	// if (spt_find_page(&thread_current()->spt, addr))
+	// 	return ;
+	// uintptr_t stack_bottom = pg_round_down(addr);
+	// thread_current()->stack_bottom = stack_bottom;
+	// vm_alloc_page(VM_ANON, stack_bottom, true);
 }
 
 /* Handle the fault on write_protected page */
@@ -240,25 +228,17 @@ static bool
 vm_handle_wp (struct page *page UNUSED) {
 	struct frame *old_frame = page->frame;
 	struct thread *cur = thread_current();
-	// page->is_writable = true;
-	// printf("check %p\n", old_frame->kva);
+
 	page->frame = NULL;
 	list_remove(&page->copy_elem);
 	pml4_clear_page(cur->pml4, page->va);
-	// page->is_writable = true;
-	// printf("check write_protected %d\n", old_frame->write_protected);
+
 	old_frame->write_protected--;
-	if(old_frame->write_protected == 1 && old_frame->page != page){
-		old_frame->page->is_writable = true;
-	} else if(old_frame->page == page){
-		// printf("check frame->page %p\n", old_frame->page);
+	if(old_frame->page == page){
 		old_frame->page = list_entry(list_begin(&old_frame->page_list), struct page, copy_elem);
-		// printf("check frame->page %p\n", old_frame->page);
 	}
 	if (vm_do_claim_page(page)){
-		lock_acquire(&lock_copy);
 		memcpy(page->frame->kva, old_frame->kva, PGSIZE);
-		lock_release(&lock_copy);
 		return true;
 	} else {
 		// printf("check do_claim_fail\n");
@@ -296,7 +276,9 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 	page = spt_find_page(spt, addr);
 	// printf("[Debug]before spt_find_page\n");
-	// printf("[Debug]spt_find_page : %p\n", page);
+	
+	// printf("[Debug]spt_find_page : %p\n", page->va);
+	// printf("[Debug]spt_find_page : %p\n", page->uninit.aux);
 	if (page == NULL){
 		// printf("page is NULL");
 		return false;
@@ -359,7 +341,7 @@ static bool
 	if (pml4_get_page(thread_current()->pml4, page->va) == NULL) {// table에 해당하는 값이 없으면
 		if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->is_writable)) // table에 해당하는 page 넣어주고,
 			{
-				printf("check false pml4_set_page\n");
+				// printf("check false pml4_set_page\n");
 				return false;
 			}
 	}
@@ -385,32 +367,28 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 	struct hash_iterator i;
 	bool success = true;
 	hash_first (&i, &src->spt_hash);
-	// printf("check offsetof %p\n", (uint64_t) src - offsetof(struct thread, spt));
-	// printf("check current thread %p\n", thread_current());
+	
 	while (hash_next(&i)){
 		struct page *src_page = hash_entry (hash_cur(&i), struct page, hash_elem);
 		struct page *dst_page = (struct page *)malloc(sizeof(struct page));
-		
-		
-		lock_acquire(&lock_copy);
+	
 		memcpy(dst_page, src_page, sizeof(struct page));
-		lock_release(&lock_copy);
+		
 		if (src_page->frame){
-			// src_page->is_writable = false;
-			// dst_page->is_writable = false;
-			lock_acquire(&lock_copy);
+			
 			list_push_back(&src_page->frame->page_list, &dst_page->copy_elem);
-			lock_release(&lock_copy);
-
-			pml4_set_page(thread_current()->pml4, dst_page->va, dst_page->frame->kva, 0);
 			src_page->frame->write_protected++;
-			if(src_page->file.type == VM_FILE) {
-				struct file_info * file_info = (struct file_info *)malloc(sizeof(struct file_info));
-				lock_acquire(&lock_copy);
-				memcpy(file_info, (struct file_info *)src_page->uninit.aux, sizeof(file_info));
-				file_info->file = file_reopen(file_info->file);
-				lock_release(&lock_copy);
-				thread_current()->open_addr = dst_page->va;
+			pml4_set_page(thread_current()->pml4, dst_page->va, dst_page->frame->kva, 0);
+
+			if(src_page->uninit.aux != NULL) {
+				struct file_info *file_info = (struct file_info *)malloc(sizeof(struct file_info));
+				memcpy(file_info, src_page->uninit.aux, sizeof(struct file_info));
+				if(page_get_type(src_page) == VM_FILE)
+				{
+					lock_acquire(&lock_read);
+					file_info->file = file_reopen(file_info->file);
+					lock_release(&lock_read);
+				}
 				dst_page->uninit.aux = file_info;
 			}
 		}
@@ -431,18 +409,22 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 		hash_first (&i, &spt->spt_hash);
 		hash_next(&i);
 		struct page *target = hash_entry (hash_cur(&i), struct page, hash_elem);
+		if (target == NULL) break;
 		if(target->frame)
 		{
-			if (target->frame->write_protected == 1) list_remove(&target->frame->list_e); // 원본인 경우 frame list_e에서 제거.
-			if (target->uninit.type == VM_FILE) {
-				munmap(target->va); //munmap 안에서 spt_remove_page 실행.
-				return ;
+			if (target->frame->write_protected == 1) 
+			{
+				list_remove(&target->frame->list_e); // 원본인 경우 frame list_e에서 제거.
+				if (target->uninit.type == VM_FILE) {
+					struct file_info *file_info = (struct file_info*) target->uninit.aux;
+
+					munmap(file_info->open_addr);  //munmap 안에서 spt_remove_page 실행.
+					continue;
+				}
 			}
 		}
 		spt_remove_page(spt, target);
 	}
-	// lock_release(&lock_kill);
-	// for (int i = 0; i < 1000; i++);
 }
 
 unsigned

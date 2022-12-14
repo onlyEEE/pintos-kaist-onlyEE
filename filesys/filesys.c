@@ -12,7 +12,7 @@
 struct disk *filesys_disk;
 
 static void do_format (void);
-static struct lock create_lock;
+
 /* Initializes the file system module.
  * If FORMAT is true, reformats the file system. */
 void
@@ -39,7 +39,7 @@ filesys_init (bool format) {
 
 	free_map_open ();
 #endif
-	lock_init(&create_lock);
+
 }
 
 /* Shuts down the file system module, writing any unwritten data
@@ -61,7 +61,6 @@ filesys_done (void) {
 bool
 filesys_create (const char *name, off_t initial_size) {
 	disk_sector_t inode_sector = 0;
-	lock_acquire(&create_lock);
 	struct dir *dir = dir_open_root ();
 	bool success = (dir != NULL
 			&& free_map_allocate (1, &inode_sector)
@@ -70,7 +69,6 @@ filesys_create (const char *name, off_t initial_size) {
 	if (!success && inode_sector != 0)
 		free_map_release (inode_sector, 1);
 	dir_close (dir);
-	lock_release(&create_lock);
 	return success;
 }
 

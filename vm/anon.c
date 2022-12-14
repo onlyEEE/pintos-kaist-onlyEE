@@ -5,7 +5,6 @@
 #include "lib/kernel/bitmap.h"
 /* DO NOT MODIFY BELOW LINE */
 struct bitmap *swap_table;
-struct lock lock;
 static struct disk *swap_disk;
 static bool anon_swap_in (struct page *page, void *kva);
 static bool anon_swap_out (struct page *page);
@@ -25,7 +24,6 @@ vm_anon_init (void) {
 	/* TODO: Set up the swap_disk. */
 	swap_disk = NULL;
 	swap_disk = disk_get(1, 1);
-	lock_init(&lock);
 	size_t swap_disk_size = disk_size(swap_disk);
 	swap_table = bitmap_create(swap_disk_size >> 3);
 }
@@ -34,6 +32,7 @@ vm_anon_init (void) {
 bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
+	// printf("check in anon_init\n");
 	page->operations = &anon_ops;
 	struct anon_page *anon_page = &page->anon;
 	anon_page->bit_idx = bitmap_size(swap_table) + 1;
@@ -61,9 +60,9 @@ anon_swap_in (struct page *page, void *kva) {
 	if (bitmap_test(swap_table, anon_page->bit_idx) == false) return false;
 	for (int i = 0; i < 8; i++)
 		disk_read(swap_disk, (anon_page->bit_idx) * 8 + i, kva + 512 * i);
-	lock_acquire(&lock);
+	// lock_acquire(&lock);
 	bitmap_set(swap_table, anon_page->bit_idx, 0);
-	lock_release(&lock);
+	// lock_release(&lock);
 	// printf("check swap_in kva %s\n", kva);
 	// printf("check swap_in page->frame->page->va %p\n", page->frame->page->va);
 	// printf("check swap_in page-->va %p\n", page->va);
@@ -87,9 +86,9 @@ anon_swap_out (struct page *page) {
 	disk_sector_t sector_idx = bitmap_idx * 8;
 	for(int i = 0; i < 8; i++)
 		disk_write(swap_disk, sector_idx + i, page->va + 512 * i);
-	lock_acquire(&lock);
+	// lock_acquire(&lock);
 	bitmap_set(swap_table, bitmap_idx, 1);
-	lock_release(&lock);
+	// lock_release(&lock);
 	anon_page->bit_idx = bitmap_idx;
 	// palloc_free_page(page->frame->kva);
 	pml4_clear_page(page_holder->pml4, page->va);
@@ -104,19 +103,20 @@ anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
 	struct frame *frame = page->frame;
 	if (page){
-		if(anon_page) {
-			if (anon_page->aux){
-				// free(anon_page->aux);
-				anon_page->aux = NULL;
-			}
-		}
 		if(frame){
 			list_remove(&page->copy_elem);
 			frame->write_protected--;
 			if(frame->write_protected == 0){
 				page->frame = NULL;
-				palloc_free_page(frame->kva);
+				// palloc_free_page(frame->kva);
 				free(frame);
+				if(anon_page) {
+					if (anon_page->aux){
+						struct file_info *file_info= (struct file_info *) anon_page->aux;
+						// free(file_info);
+						anon_page->aux = NULL;
+					}
+				}
 			} else if(frame->page == page){
 				// printf("check frame->page %p\n", frame->page);
 				frame->page = list_entry(list_begin(&frame->page_list), struct page, copy_elem);

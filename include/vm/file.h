@@ -11,6 +11,8 @@ struct file_info {
 	uint32_t read_bytes;
 	uint32_t zero_bytes;
 	off_t ofs;
+	void *open_addr;
+	void *close_addr;
 };
 
 struct file_page {

@@ -51,11 +51,6 @@ void munmap(void * addr);
 #define MSR_STAR 0xc0000081         /* Segment selector msr */
 #define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
-
-static struct lock lock;
-static struct lock lock_open;
-static struct lock lock_read;
-static struct lock lock_write;
 	/*register uint64_t *num asm ("rax") = (uint64_t *) num_;
 	register uint64_t *a1 asm ("rdi") = (uint64_t *) a1_;
 	register uint64_t *a2 asm ("rsi") = (uint64_t *) a2_;
@@ -66,10 +61,7 @@ static struct lock lock_write;
 
 void
 syscall_init (void) {
-	lock_init(&lock);
-	lock_init(&lock_open);
 	lock_init(&lock_read);
-	lock_init(&lock_write);
 	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
 			((uint64_t)SEL_KCSEG) << 32);
 	write_msr(MSR_LSTAR, (uint64_t) syscall_entry);
@@ -94,16 +86,20 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_EXIT:
 		exit(f->R.rdi);
 		break;
+	case SYS_EXEC:
+		check_address(f->R.rdi);
+		f->R.rax = exec(f->R.rdi);
+		break;
 	case SYS_CREATE:
+		check_address(f->R.rdi);
 		f->R.rax = create(f->R.rdi,f->R.rsi);
 		break;
 	case SYS_REMOVE:
+		check_address(f->R.rdi);
 		f->R.rax = remove(f->R.rdi);
 		break;
-	case SYS_EXEC:
-		f->R.rax = exec(f->R.rdi);
-		break;
 	case SYS_OPEN:
+		check_address(f->R.rdi);
 		f->R.rax = open(f->R.rdi);
 		break;
 	case SYS_FILESIZE:
@@ -118,6 +114,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		f->R.rax = write(f->R.rdi,f->R.rsi,f->R.rdx);
 		break;
 	case SYS_FORK:
+		check_address(f->R.rdi);
 		f->R.rax = fork(f->R.rdi,f);
 		break;
 	case SYS_WAIT:
@@ -139,10 +136,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
 		break;
 	case SYS_MUNMAP:
+		check_address(f->R.rdi);
 		munmap(f->R.rdi);
-		break;
-	default:
-		thread_exit();
 		break;
 	}
 }
@@ -194,6 +189,7 @@ void *check_address(void* addr){
 
 void check_valid_buffer (void *buffer, size_t size, bool to_write, struct intr_frame *f){
 	void *rsp = f->rsp;
+
 	// msg("checkin check valid buffer %d", to_write);
 	while ((int)size > 0){
 		struct page* page = (struct page*)check_address(buffer);
@@ -243,13 +239,16 @@ void exit (int status){
 
 /* Project2-3 System Call */
 bool create(const char *file, unsigned initial_size){
-	check_address(file);
-	return filesys_create(file,initial_size);
+	// check_address(file);
+	// lock_acquire(&lock_read);
+	bool succ = filesys_create(file,initial_size);
+	// lock_acquire(&lock_read);
+	return succ;
 }
 
 /* Project2-3 System Call */
 bool remove(const char *file){
-	check_address(file);
+	// check_address(file);
 	if(filesys_remove(file)){
 		return true;
 	}
@@ -258,7 +257,7 @@ bool remove(const char *file){
 
 /* Project2-3 System Call */
 int exec (const char *cmd_line){
-	check_address(cmd_line);
+	// check_address(cmd_line);
 	char* copy = palloc_get_page(PAL_ZERO);
 	if(copy == NULL){
 		exit(-1);
@@ -274,19 +273,27 @@ int exec (const char *cmd_line){
 
 /* Project2-3 System Call */
 int open (const char *file){
-	check_address(file);
-	lock_acquire(&lock);
-	struct file *fileobj = filesys_open(file);
-	if (fileobj == NULL) {
+	// check_address(file);
+	struct file *fileobj = (struct file*)malloc(sizeof(struct file));
+	struct file *temp = filesys_open(file);
+	
+	if (temp == NULL || fileobj == NULL)
 		return -1;
-	}
 
+	memcpy(fileobj, temp, sizeof(struct file));
+	// lock_acquire(&lock_read);
+	// struct file *fileobj = filesys_open(file);
+	// lock_release(&lock_read);
+	// if(fileobj == NULL)
+	// 	return -1;
+
+	lock_acquire(&lock_read);
 	int fd = add_file(fileobj); // fdt : file data table
+	lock_release(&lock_read);
 	// fd table이 가득 찼다면
 	if (fd == -1) {
 		file_close(fileobj);
 	}
-	lock_release(&lock);
 	return fd;
 }
 
@@ -320,10 +327,8 @@ int filesize (int fd){
 int read (int fd, void *buffer, unsigned size){
 	off_t char_count = 0;
 	struct thread *cur = thread_current();
-	// lock_acquire(&lock_read);
 	
 	struct file *file = find_file(fd);
-	// lock_release(&lock_read);
 	if (fd == NULL){
 		return -1;
 	}
@@ -365,9 +370,9 @@ int read (int fd, void *buffer, unsigned size){
 	else{
 		lock_acquire(&lock_read);
 		char_count = file_read(file,buffer,size);
+		lock_release(&lock_read);
 		// printf("check buffer %s\n",buffer);
 		// printf("check char_count %d\n", char_count);
-		lock_release(&lock_read);
 	}
 	return char_count;
 }
@@ -376,9 +381,9 @@ int read (int fd, void *buffer, unsigned size){
 int write (int fd, const void *buffer, unsigned size) {
 	off_t write_size = 0;
 	struct thread *cur = thread_current();
-	lock_acquire(&lock_write);
+	
 	struct file *file = find_file(fd);
-	lock_release(&lock_write);
+
 	if (fd == NULL){
 		return -1;
 	}
@@ -396,9 +401,9 @@ int write (int fd, const void *buffer, unsigned size) {
 		putbuf(buffer, size);
 		return size;
   	}else{
-		lock_acquire(&lock_write);
+		lock_acquire(&lock_read);
 		write_size = file_write(file,buffer,size);
-		lock_release(&lock_write);
+		lock_release(&lock_read);
 	} 
 	return write_size;
 }
@@ -414,7 +419,7 @@ struct file* find_file(int fd){
 
 /* Project2-3 System Call */
 int fork (const char *thread_name,struct intr_frame* if_){
-	check_address(thread_name);
+	// check_address(thread_name);
 	return process_fork(thread_name,if_);
 }
 
@@ -436,19 +441,14 @@ void close (int fd){
 		curr->stdin_count--;
 	else if(fd==1 || close_file==STDOUT)
 		curr->stdout_count--;
-	// lock_acquire(&lock_open);
 	remove_file(fd);
-	// lock_release(&lock_open);
-
 
 	if(fd < 2 || close_file <= 2){
 		return;
 	}
 
 	if(close_file->dup_count == 0){
-		// lock_acquire(&lock_open);
 		file_close(close_file);
-		// lock_release(&lock_ope/n);
 	}
 	else{
 		close_file->dup_count--;
@@ -486,24 +486,41 @@ unsigned tell (int fd){
 
 void *
 mmap (void *addr, size_t length, int writable, int fd, off_t offset){
-	if (addr <= 0 || (int) length <= 0) return NULL;
-	if (addr + length > KERN_BASE || addr > KERN_BASE) return NULL;
-	if (offset % PGSIZE != 0 || pg_round_down(addr) != addr) return NULL;
 
+	if (addr <= 0 || (int) length <= 0) 
+		return NULL;
+
+	if (addr + length > KERN_BASE || addr > KERN_BASE)
+		return NULL;
+
+	if (offset % PGSIZE != 0 || pg_round_down(addr) != addr)
+		return NULL;
+	
+	if (length == 0 || filesize(fd) == 0)
+		return NULL;
+	// printf("check addr %p\n", addr);
 	enum intr_level old_level;
 	// old_level = intr_disable();
-
 	void * mapped_addr = NULL;
-	lock_acquire(&lock_open);
+	// struct file *file = find_file(fd);
+	// struct file *file_cp = (struct file *)malloc(sizeof(struct file));
+	// if (file == NULL || file_cp == NULL)
+	// 	return NULL;
 	struct file *file = find_file(fd);
 	file = file_reopen(file);
+	if (file == NULL)
+		return NULL;
+
+	// memcpy(file_cp, file, sizeof(struct file));
+	// lock_acquire(&lock_read);
+	// file = file_reopen(file);
+	// lock_release(&lock_read);
 	if (file_length(file) == 0) return NULL;
 	length = file_length(file) < length ? file_length(file) : length;
-	lock_release(&lock_open);
 	mapped_addr = do_mmap(addr, length, writable, file, offset);
 	// intr_set_level(old_level);
 	if (mapped_addr != NULL)
-		return addr;
+		return mapped_addr;
 	else return NULL;
 }
 
