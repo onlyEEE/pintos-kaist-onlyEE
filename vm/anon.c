@@ -113,7 +113,7 @@ anon_destroy (struct page *page) {
 				if(anon_page) {
 					if (anon_page->aux){
 						struct file_info *file_info= (struct file_info *) anon_page->aux;
-						// free(anon_page->aux);
+						// free(file_info);
 						anon_page->aux = NULL;
 					}
 				}
